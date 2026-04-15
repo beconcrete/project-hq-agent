@@ -3,18 +3,14 @@
     {
       "route": "/api/*",
       "allowedRoles": ["anonymous"]
-    },
-    {
-      "route": "/*",
-      "serve": "/index.html",
-      "statusCode": 200
     }
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
+      "/public/*",
       "/assets/*",
-      "*.{css,scss,js,png,gif,ico,jpg,svg,woff,woff2,ttf,eot}"
+      "*.{css,scss,js,png,gif,ico,jpg,svg,woff,woff2,ttf,eot,html}"
     ]
   },
   "responseOverrides": {

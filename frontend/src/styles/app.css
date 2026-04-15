@@ -516,6 +516,14 @@ body {
     transform: translateX(0);
   }
 
+  /* Restore text visibility when drawer is open — tablet breakpoint hides it */
+  .sidebar.open .logo-text,
+  .sidebar.open .nav-label,
+  .sidebar.open .nav-badge {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .sidebar.open ~ .sidebar-overlay {
     display: block;
   }
