@@ -1,0 +1,2044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HQ Agent — Design Language</title>
+<style>
+/* ============================================================
+   HQ AGENT — DESIGN LANGUAGE REFERENCE
+   Aesthetic: Refined Industrial. Dense, precise, information-
+   forward. Bloomberg terminal precision meets modern SaaS
+   clarity. Data has dignity here.
+   ============================================================ */
+
+/* --- Tokens ------------------------------------------------ */
+:root {
+  /* Primary */
+  --blue-50:  #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-200: #bfdbfe;
+  --blue-500: #3b82f6;
+  --blue-600: #1a56db;
+  --blue-700: #1e40af;
+  --blue-900: #1e3a8a;
+
+  /* Slate neutrals */
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #020617;
+
+  /* Semantic */
+  --green-50:  #f0fdf4;
+  --green-100: #dcfce7;
+  --green-600: #16a34a;
+  --green-700: #15803d;
+
+  --amber-50:  #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-600: #d97706;
+  --amber-700: #b45309;
+
+  --red-50:  #fef2f2;
+  --red-100: #fee2e2;
+  --red-600: #dc2626;
+  --red-700: #b91c1c;
+
+  --indigo-50:  #eef2ff;
+  --indigo-100: #e0e7ff;
+  --indigo-600: #6366f1;
+  --indigo-700: #4f46e5;
+
+  /* Semantic aliases */
+  --color-primary:       var(--blue-600);
+  --color-primary-hover: var(--blue-700);
+  --color-primary-light: var(--blue-50);
+
+  --color-success: var(--green-600);
+  --color-warning: var(--amber-600);
+  --color-danger:  var(--red-600);
+  --color-info:    var(--indigo-600);
+
+  --color-bg:      var(--slate-50);
+  --color-surface: #ffffff;
+  --color-border:  var(--slate-200);
+  --color-border-subtle: var(--slate-100);
+
+  --color-text-primary:   var(--slate-900);
+  --color-text-secondary: var(--slate-600);
+  --color-text-muted:     var(--slate-400);
+
+  /* Sidebar dark palette */
+  --sidebar-bg:          var(--slate-900);
+  --sidebar-surface:     var(--slate-800);
+  --sidebar-border:      rgba(255,255,255,0.07);
+  --sidebar-text:        var(--slate-300);
+  --sidebar-text-muted:  var(--slate-500);
+  --sidebar-active-bg:   rgba(255,255,255,0.08);
+  --sidebar-active-text: #ffffff;
+  --sidebar-hover-bg:    rgba(255,255,255,0.05);
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04);
+
+  /* Typography */
+  --font-display: 'Georgia', 'Times New Roman', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+/* --- Reset ------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 14px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Page Layout ------------------------------------------ */
+.page-header {
+  background: var(--sidebar-bg);
+  padding: var(--space-12) var(--space-8);
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.page-header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--blue-500);
+  margin-bottom: var(--space-3);
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.02em;
+  color: #fff;
+  margin-bottom: var(--space-3);
+  line-height: 1.1;
+}
+
+.page-title strong {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--slate-400);
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+/* TOC nav */
+.toc-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.toc-nav::-webkit-scrollbar { display: none; }
+
+.toc-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  padding: 0 var(--space-8);
+  gap: 0;
+}
+
+.toc-link {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: var(--space-3) var(--space-4);
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 120ms, border-color 120ms;
+}
+.toc-link:hover {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-border);
+}
+
+/* Main content */
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-8) var(--space-12);
+}
+
+/* Section */
+.section {
+  margin-bottom: var(--space-12);
+  padding-top: var(--space-8);
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section-number {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.08em;
+  min-width: 28px;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.section-title em {
+  font-style: normal;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: 13px;
+  margin-left: var(--space-3);
+  font-family: var(--font-sans);
+}
+
+/* Subsection label */
+.subsection-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+  margin-top: var(--space-5);
+}
+.subsection-label:first-child { margin-top: 0; }
+
+/* Token label (shown under swatches, type specimens, etc.) */
+.token {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* Grid helpers */
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+.grid-auto { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-4); }
+.flex-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-start; }
+.flex-col { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* Demo panel */
+.demo-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.demo-panel-dark {
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
+}
+
+/* ============================================================
+   01 COLOR PALETTE
+   ============================================================ */
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: var(--space-3);
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.swatch-color {
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(0,0,0,0.07);
+}
+
+.swatch-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.swatch-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+/* Semantic color row */
+.semantic-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+.semantic-swatch {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+.semantic-swatch-main {
+  height: 56px;
+}
+
+.semantic-swatch-light {
+  height: 32px;
+}
+
+.semantic-swatch-label {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ============================================================
+   02 TYPOGRAPHY
+   ============================================================ */
+
+.type-specimen {
+  border-left: 2px solid var(--color-border);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+}
+
+.type-meta {
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.type-meta .token {
+  display: block;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 2px;
+}
+
+.type-meta .type-size {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.type-h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; color: var(--color-text-primary); }
+.type-h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; color: var(--color-text-primary); }
+.type-h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; color: var(--color-text-primary); }
+.type-h4 { font-size: 15px; font-weight: 600; letter-spacing: 0; line-height: 1.4; color: var(--color-text-primary); }
+.type-body { font-size: 14px; font-weight: 400; line-height: 1.6; color: var(--color-text-primary); }
+.type-small { font-size: 12px; font-weight: 400; line-height: 1.5; color: var(--color-text-secondary); }
+.type-caption { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; line-height: 1.4; color: var(--color-text-muted); text-transform: uppercase; }
+.type-mono { font-family: var(--font-mono); font-size: 13px; line-height: 1.5; color: var(--color-text-primary); }
+
+/* ============================================================
+   03 SPACING SCALE
+   ============================================================ */
+
+.spacing-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.spacing-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.spacing-bar {
+  background: var(--blue-600);
+  opacity: 0.8;
+  border-radius: var(--radius-sm);
+  width: 24px;
+}
+
+.spacing-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.spacing-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+/* ============================================================
+   04 BUTTONS
+   ============================================================ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms, border-color 120ms, box-shadow 120ms, opacity 120ms;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.btn-primary {
+  background: var(--blue-600);
+  color: #fff;
+  border-color: var(--blue-600);
+  box-shadow: 0 1px 2px rgba(26,86,219,0.2);
+}
+.btn-primary:hover {
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+  box-shadow: 0 2px 8px rgba(26,86,219,0.3);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-xs);
+}
+.btn-secondary:hover {
+  background: var(--slate-50);
+  border-color: var(--slate-300);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background: var(--slate-100);
+  color: var(--color-text-primary);
+}
+
+.btn-danger {
+  background: var(--color-surface);
+  color: var(--red-600);
+  border-color: var(--red-200, #fecaca);
+}
+.btn-danger:hover {
+  background: var(--red-50);
+  border-color: var(--red-300, #fca5a5);
+}
+
+.btn:disabled, .btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-loading {
+  pointer-events: none;
+}
+
+.btn-loading::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+  margin-right: var(--space-2);
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.btn-lg {
+  padding: 11px 22px;
+  font-size: 15px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   05 FORM COMPONENTS
+   ============================================================ */
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  font-family: var(--font-sans);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color 120ms, box-shadow 120ms;
+  line-height: 1.5;
+  box-shadow: var(--shadow-xs);
+}
+
+.form-input::placeholder { color: var(--color-text-muted); }
+.form-input:focus {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+.form-input.is-error {
+  border-color: var(--red-500, #ef4444);
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.1);
+}
+.form-input:disabled {
+  background: var(--slate-50);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.form-hint {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+
+.form-error {
+  font-size: 11.5px;
+  color: var(--red-600);
+  font-weight: 500;
+}
+
+textarea.form-input {
+  min-height: 80px;
+  resize: vertical;
+}
+
+select.form-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+/* Checkbox / Radio */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.check-row input[type="checkbox"],
+.check-row input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue-600);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.check-label {
+  font-size: 13.5px;
+  color: var(--color-text-primary);
+}
+
+/* File Dropzone */
+.dropzone {
+  border: 1.5px dashed var(--slate-300);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-8);
+  text-align: center;
+  background: var(--slate-50);
+  cursor: pointer;
+  transition: border-color 150ms, background 150ms;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dropzone:hover, .dropzone.drag-active {
+  border-color: var(--blue-500);
+  background: var(--blue-50);
+}
+
+.dropzone-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--slate-400);
+}
+
+.dropzone.drag-active .dropzone-icon {
+  color: var(--blue-600);
+}
+
+.dropzone-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.dropzone-subtext {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.dropzone-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--slate-200);
+  color: var(--slate-600);
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   06 STATUS BADGES
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.badge-processing {
+  background: var(--amber-100);
+  color: var(--amber-700);
+}
+.badge-processing .badge-dot {
+  background: var(--amber-600);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+.badge-success {
+  background: var(--green-100);
+  color: var(--green-700);
+}
+.badge-success .badge-dot { background: var(--green-600); }
+
+.badge-error {
+  background: var(--red-100);
+  color: var(--red-700);
+}
+.badge-error .badge-dot { background: var(--red-600); }
+
+.badge-info {
+  background: var(--indigo-100);
+  color: var(--indigo-700);
+}
+.badge-info .badge-dot { background: var(--indigo-600); }
+
+.badge-draft {
+  background: var(--slate-100);
+  color: var(--slate-600);
+}
+.badge-draft .badge-dot { background: var(--slate-400); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ============================================================
+   07 CARDS
+   ============================================================ */
+
+.contract-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  cursor: pointer;
+  transition: border-color 150ms, box-shadow 150ms;
+  position: relative;
+  overflow: hidden;
+}
+
+.contract-card:hover {
+  border-color: var(--slate-300);
+  box-shadow: var(--shadow-sm);
+}
+
+.contract-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--blue-600);
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.contract-card:hover::before { opacity: 1; }
+
+.contract-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.contract-card-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--slate-100);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--slate-500);
+  flex-shrink: 0;
+}
+
+.contract-card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.contract-card-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.contract-card-meta {
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+
+.contract-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.contract-card-stat {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.contract-card-stat strong {
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
+/* Empty card */
+.card-empty {
+  background: var(--color-surface);
+  border: 1.5px dashed var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+}
+
+.card-empty-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--slate-300);
+}
+
+.card-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.card-empty-text {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+  max-width: 240px;
+  line-height: 1.5;
+}
+
+/* Skeleton card */
+.card-skeleton {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--slate-100) 25%, var(--slate-50) 50%, var(--slate-100) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-sweep {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skel-line { height: 12px; margin-bottom: var(--space-2); }
+.skel-w-full  { width: 100%; }
+.skel-w-3-4   { width: 75%; }
+.skel-w-1-2   { width: 50%; }
+.skel-w-1-4   { width: 25%; }
+
+/* ============================================================
+   08 DATA DISPLAY
+   ============================================================ */
+
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-subtle);
+  align-items: baseline;
+}
+
+.field-row:last-child { border-bottom: none; }
+
+.field-row:nth-child(even) {
+  background: var(--slate-50);
+}
+
+.field-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.field-value {
+  font-size: 13.5px;
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.field-missing {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+  background: var(--slate-100);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================================
+   09 CHAT BUBBLES
+   ============================================================ */
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 600px;
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.chat-message.user {
+  align-items: flex-end;
+}
+
+.chat-message.agent {
+  align-items: flex-start;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.chat-message.user .chat-bubble {
+  background: var(--blue-600);
+  color: #fff;
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.chat-message.agent .chat-bubble {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-bottom-left-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+}
+
+.chat-meta {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chat-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--green-100);
+  color: var(--green-700);
+}
+
+.chat-opus-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--indigo-100);
+  color: var(--indigo-700);
+}
+
+/* Typing indicator */
+.chat-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  border-bottom-left-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+  width: fit-content;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--slate-400);
+  border-radius: 50%;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
+  30%            { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ============================================================
+   10 FILE DROPZONE (full-size standalone)
+   (reuses .dropzone from section 05 — shown at full width)
+   ============================================================ */
+
+.dropzone-full {
+  border: 2px dashed var(--slate-300);
+  border-radius: var(--radius-xl);
+  padding: var(--space-12) var(--space-8);
+  text-align: center;
+  background: var(--slate-50);
+  cursor: pointer;
+  transition: border-color 150ms, background 150ms;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.dropzone-full:hover {
+  border-color: var(--blue-400);
+  background: var(--blue-50);
+}
+
+.dropzone-full .dropzone-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--slate-400);
+}
+
+.dropzone-full:hover .dropzone-icon {
+  color: var(--blue-500);
+}
+
+.dropzone-full .dropzone-heading {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dropzone-full .dropzone-subtext {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.dropzone-types {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ============================================================
+   11 TOAST NOTIFICATIONS
+   ============================================================ */
+
+.toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 360px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+
+.toast-success::before { background: var(--green-600); }
+.toast-error::before   { background: var(--red-600); }
+.toast-info::before    { background: var(--indigo-600); }
+
+.toast-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-success .toast-icon { color: var(--green-600); }
+.toast-error   .toast-icon { color: var(--red-600); }
+.toast-info    .toast-icon { color: var(--indigo-600); }
+
+.toast-body { flex: 1; }
+.toast-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+.toast-text {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.6;
+}
+.toast-close:hover { opacity: 1; }
+
+/* ============================================================
+   12 NAVIGATION PREVIEW
+   ============================================================ */
+
+.nav-preview-wrap {
+  display: grid;
+  grid-template-columns: 240px 64px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.nav-demo {
+  background: var(--sidebar-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--sidebar-border);
+}
+
+.nav-demo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.nav-logo-mark {
+  width: 28px;
+  height: 28px;
+  background: var(--blue-600);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.nav-logo-text {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-left: 10px;
+  flex: 1;
+}
+
+.nav-list-demo {
+  list-style: none;
+  padding: var(--space-2) 0;
+}
+
+.nav-item-demo {
+  padding: 0 var(--space-2);
+  margin: 2px 0;
+}
+
+.nav-link-demo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  color: var(--sidebar-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms;
+  cursor: pointer;
+}
+
+.nav-item-demo.active .nav-link-demo {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
+}
+
+.nav-item-demo.muted .nav-link-demo {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nav-item-demo:not(.active):not(.muted) .nav-link-demo:hover {
+  background: var(--sidebar-hover-bg);
+  color: #fff;
+}
+
+.nav-icon-demo {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.nav-badge-demo {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(255,255,255,0.08);
+  color: var(--sidebar-text-muted);
+  padding: 1px 6px;
+  border-radius: 20px;
+}
+
+.nav-footer-demo {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--sidebar-border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sidebar-text-muted);
+}
+
+/* Collapsed nav */
+.nav-demo-collapsed {
+  background: var(--sidebar-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--sidebar-border);
+  width: 64px;
+}
+
+.nav-collapsed-header {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.nav-collapsed-list {
+  list-style: none;
+  padding: var(--space-2) 0;
+}
+
+.nav-collapsed-item {
+  display: flex;
+  justify-content: center;
+  padding: 4px 8px;
+}
+
+.nav-collapsed-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--sidebar-text);
+  transition: background 120ms;
+  cursor: pointer;
+}
+
+.nav-collapsed-item.active .nav-collapsed-link {
+  background: var(--sidebar-active-bg);
+  color: #fff;
+}
+.nav-collapsed-item.muted .nav-collapsed-link { opacity: 0.4; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1024px) {
+  .grid-3  { grid-template-columns: repeat(2, 1fr); }
+  .grid-4  { grid-template-columns: repeat(2, 1fr); }
+  .nav-preview-wrap { grid-template-columns: 1fr; }
+  .nav-demo-collapsed { width: 100%; max-width: 240px; }
+}
+
+@media (max-width: 768px) {
+  .main { padding: var(--space-6) var(--space-5) var(--space-10); }
+  .page-header { padding: var(--space-8) var(--space-5); }
+  .toc-inner { padding: 0 var(--space-4); }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .semantic-row { grid-template-columns: repeat(2, 1fr); }
+  .field-row { grid-template-columns: 1fr; gap: var(--space-1); }
+  .field-label { text-transform: none; letter-spacing: 0; color: var(--color-text-muted); }
+  .type-specimen { flex-direction: column; gap: var(--space-2); }
+  .type-meta { min-width: unset; }
+  .spacing-row { gap: var(--space-4); }
+}
+
+@media (max-width: 480px) {
+  .swatch-grid { grid-template-columns: repeat(4, 1fr); }
+  .semantic-row { grid-template-columns: 1fr; }
+  .flex-row { flex-direction: column; align-items: stretch; }
+  .flex-row .btn { justify-content: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========================================================
+     PAGE HEADER
+     ======================================================== -->
+<header class="page-header">
+  <div class="page-header-inner">
+    <p class="page-eyebrow">HQ Agent · Design Language · v0.1</p>
+    <h1 class="page-title"><strong>Visual</strong> <em>System</em></h1>
+    <p class="page-subtitle">Component reference and design token documentation for the HQ Agent platform. Every UI element built for this system departs from this page.</p>
+  </div>
+</header>
+
+<!-- ========================================================
+     TABLE OF CONTENTS
+     ======================================================== -->
+<nav class="toc-nav" aria-label="Design sections">
+  <div class="toc-inner">
+    <a href="#colors"     class="toc-link">01 Colors</a>
+    <a href="#type"       class="toc-link">02 Type</a>
+    <a href="#spacing"    class="toc-link">03 Spacing</a>
+    <a href="#buttons"    class="toc-link">04 Buttons</a>
+    <a href="#forms"      class="toc-link">05 Forms</a>
+    <a href="#badges"     class="toc-link">06 Badges</a>
+    <a href="#cards"      class="toc-link">07 Cards</a>
+    <a href="#data"       class="toc-link">08 Data</a>
+    <a href="#chat"       class="toc-link">09 Chat</a>
+    <a href="#upload"     class="toc-link">10 Upload</a>
+    <a href="#toasts"     class="toc-link">11 Toasts</a>
+    <a href="#nav"        class="toc-link">12 Navigation</a>
+  </div>
+</nav>
+
+<!-- ========================================================
+     MAIN CONTENT
+     ======================================================== -->
+<main class="main">
+
+  <!-- 01 COLORS -------------------------------------------- -->
+  <section class="section" id="colors">
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <h2 class="section-title">Color Palette <em>design tokens</em></h2>
+    </div>
+
+    <p class="subsection-label">Primary Blue</p>
+    <div class="swatch-grid" style="margin-bottom: var(--space-6)">
+      <div class="swatch"><div class="swatch-color" style="background:#eff6ff"></div><div class="swatch-name">blue-50</div><div class="swatch-value">#eff6ff</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#dbeafe"></div><div class="swatch-name">blue-100</div><div class="swatch-value">#dbeafe</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#bfdbfe"></div><div class="swatch-name">blue-200</div><div class="swatch-value">#bfdbfe</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#3b82f6"></div><div class="swatch-name">blue-500</div><div class="swatch-value">#3b82f6</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1a56db"></div><div class="swatch-name">blue-600 ★</div><div class="swatch-value">#1a56db</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1e40af"></div><div class="swatch-name">blue-700</div><div class="swatch-value">#1e40af</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1e3a8a"></div><div class="swatch-name">blue-900</div><div class="swatch-value">#1e3a8a</div></div>
+    </div>
+
+    <p class="subsection-label">Slate Neutrals</p>
+    <div class="swatch-grid" style="margin-bottom: var(--space-6)">
+      <div class="swatch"><div class="swatch-color" style="background:#f8fafc"></div><div class="swatch-name">slate-50</div><div class="swatch-value">#f8fafc</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#f1f5f9"></div><div class="swatch-name">slate-100</div><div class="swatch-value">#f1f5f9</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#e2e8f0"></div><div class="swatch-name">slate-200</div><div class="swatch-value">#e2e8f0</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#cbd5e1"></div><div class="swatch-name">slate-300</div><div class="swatch-value">#cbd5e1</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#94a3b8"></div><div class="swatch-name">slate-400</div><div class="swatch-value">#94a3b8</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#64748b"></div><div class="swatch-name">slate-500</div><div class="swatch-value">#64748b</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#475569"></div><div class="swatch-name">slate-600</div><div class="swatch-value">#475569</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#334155"></div><div class="swatch-name">slate-700</div><div class="swatch-value">#334155</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1e293b"></div><div class="swatch-name">slate-800</div><div class="swatch-value">#1e293b</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#0f172a"></div><div class="swatch-name">slate-900 ★</div><div class="swatch-value">#0f172a</div></div>
+    </div>
+
+    <p class="subsection-label">Semantic Colors</p>
+    <div class="semantic-row" style="margin-bottom: var(--space-6)">
+      <div class="semantic-swatch">
+        <div class="semantic-swatch-main" style="background:#16a34a"></div>
+        <div class="semantic-swatch-light" style="background:#dcfce7"></div>
+        <div class="semantic-swatch-label">SUCCESS</div>
+      </div>
+      <div class="semantic-swatch">
+        <div class="semantic-swatch-main" style="background:#d97706"></div>
+        <div class="semantic-swatch-light" style="background:#fef3c7"></div>
+        <div class="semantic-swatch-label">WARNING</div>
+      </div>
+      <div class="semantic-swatch">
+        <div class="semantic-swatch-main" style="background:#dc2626"></div>
+        <div class="semantic-swatch-light" style="background:#fee2e2"></div>
+        <div class="semantic-swatch-label">DANGER</div>
+      </div>
+      <div class="semantic-swatch">
+        <div class="semantic-swatch-main" style="background:#6366f1"></div>
+        <div class="semantic-swatch-light" style="background:#e0e7ff"></div>
+        <div class="semantic-swatch-label">INFO</div>
+      </div>
+    </div>
+
+    <p class="subsection-label">Sidebar Dark Palette</p>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="swatch-color" style="background:#0f172a;border-color:rgba(255,255,255,0.1)"></div><div class="swatch-name">sidebar-bg</div><div class="swatch-value">#0f172a</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1e293b;border-color:rgba(255,255,255,0.1)"></div><div class="swatch-name">sidebar-surface</div><div class="swatch-value">#1e293b</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#cbd5e1"></div><div class="swatch-name">sidebar-text</div><div class="swatch-value">#cbd5e1</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#64748b"></div><div class="swatch-name">sidebar-muted</div><div class="swatch-value">#64748b</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.15)"></div><div class="swatch-name">active-bg</div><div class="swatch-value">rgba(255,255,255,0.08)</div></div>
+      <div class="swatch"><div class="swatch-color" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15)"></div><div class="swatch-name">hover-bg</div><div class="swatch-value">rgba(255,255,255,0.05)</div></div>
+    </div>
+  </section>
+
+  <!-- 02 TYPOGRAPHY ---------------------------------------- -->
+  <section class="section" id="type">
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <h2 class="section-title">Typography <em>scale &amp; specimens</em></h2>
+    </div>
+
+    <div class="demo-panel">
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-h1</span><span class="type-size">32px / 700 / -0.03em</span></div>
+        <div class="type-h1">Contract Overview</div>
+      </div>
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-h2</span><span class="type-size">24px / 700 / -0.02em</span></div>
+        <div class="type-h2">Extracted Fields</div>
+      </div>
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-h3</span><span class="type-size">18px / 600 / -0.01em</span></div>
+        <div class="type-h3">Notice Period Details</div>
+      </div>
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-h4</span><span class="type-size">15px / 600 / 0</span></div>
+        <div class="type-h4">Governing Law</div>
+      </div>
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-body</span><span class="type-size">14px / 400 / 1.6lh</span></div>
+        <div class="type-body">This agreement is entered into as of the Effective Date between the parties listed herein. All obligations are subject to the terms and conditions set forth below.</div>
+      </div>
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-small</span><span class="type-size">12px / 400 / 1.5lh</span></div>
+        <div class="type-small">Uploaded 12 Apr 2026 · 3.2 MB · PDF · 14 fields extracted</div>
+      </div>
+      <div class="type-specimen">
+        <div class="type-meta"><span class="token">--type-caption</span><span class="type-size">11px / 500 / uppercase</span></div>
+        <div class="type-caption">Document Type · Contract Status · Last Modified</div>
+      </div>
+      <div class="type-specimen" style="border-bottom: none">
+        <div class="type-meta"><span class="token">--type-mono</span><span class="type-size">13px / SF Mono stack</span></div>
+        <div class="type-mono">correlationId: a3f1b9c2-... · status: complete</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 SPACING ------------------------------------------- -->
+  <section class="section" id="spacing">
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <h2 class="section-title">Spacing Scale <em>4px base unit</em></h2>
+    </div>
+
+    <div class="demo-panel">
+      <div class="spacing-row">
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 4px"></div>
+          <div class="spacing-value">4px</div>
+          <div class="spacing-label">--space-1</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 8px"></div>
+          <div class="spacing-value">8px</div>
+          <div class="spacing-label">--space-2</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 12px"></div>
+          <div class="spacing-value">12px</div>
+          <div class="spacing-label">--space-3</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 16px"></div>
+          <div class="spacing-value">16px</div>
+          <div class="spacing-label">--space-4</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 20px"></div>
+          <div class="spacing-value">20px</div>
+          <div class="spacing-label">--space-5</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 24px"></div>
+          <div class="spacing-value">24px</div>
+          <div class="spacing-label">--space-6</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 32px"></div>
+          <div class="spacing-value">32px</div>
+          <div class="spacing-label">--space-8</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 40px"></div>
+          <div class="spacing-value">40px</div>
+          <div class="spacing-label">--space-10</div>
+        </div>
+        <div class="spacing-item">
+          <div class="spacing-bar" style="height: 48px"></div>
+          <div class="spacing-value">48px</div>
+          <div class="spacing-label">--space-12</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 BUTTONS ------------------------------------------- -->
+  <section class="section" id="buttons">
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <h2 class="section-title">Buttons <em>variants &amp; states</em></h2>
+    </div>
+
+    <p class="subsection-label">Variants</p>
+    <div class="demo-panel" style="margin-bottom: var(--space-4)">
+      <div class="flex-row">
+        <button class="btn btn-primary">Upload Contract</button>
+        <button class="btn btn-secondary">Export Fields</button>
+        <button class="btn btn-ghost">Cancel</button>
+        <button class="btn btn-danger">Delete Contract</button>
+      </div>
+    </div>
+
+    <p class="subsection-label">Primary — All States</p>
+    <div class="demo-panel" style="margin-bottom: var(--space-4)">
+      <div class="flex-row">
+        <button class="btn btn-primary">Default</button>
+        <button class="btn btn-primary" style="background:var(--blue-700);border-color:var(--blue-700);box-shadow:0 2px 8px rgba(26,86,219,0.3)">Hover</button>
+        <button class="btn btn-primary btn-loading">Processing</button>
+        <button class="btn btn-primary btn-disabled" disabled>Disabled</button>
+      </div>
+    </div>
+
+    <p class="subsection-label">Sizes</p>
+    <div class="demo-panel">
+      <div class="flex-row" style="align-items:center">
+        <button class="btn btn-primary btn-sm">Small</button>
+        <button class="btn btn-primary">Default</button>
+        <button class="btn btn-primary btn-lg">Large</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 FORMS --------------------------------------------- -->
+  <section class="section" id="forms">
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <h2 class="section-title">Form Components <em>inputs, select, checkbox, dropzone</em></h2>
+    </div>
+
+    <div class="demo-panel" style="margin-bottom: var(--space-4)">
+      <div class="grid-2">
+        <div class="form-field">
+          <label class="form-label">Contract Name</label>
+          <input class="form-input" type="text" placeholder="e.g. Supplier Agreement 2026" />
+          <span class="form-hint">Used for display in the contracts list.</span>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Contract Name — Focused</label>
+          <input class="form-input" type="text" value="MSA — Acme Corp" style="border-color:var(--blue-500);box-shadow:0 0 0 3px rgba(59,130,246,0.12)" />
+        </div>
+        <div class="form-field">
+          <label class="form-label">Governing Law — Error</label>
+          <input class="form-input is-error" type="text" value="Swdeen" />
+          <span class="form-error">⚠ Value not recognised. Please check spelling.</span>
+        </div>
+        <div class="form-field">
+          <label class="form-label">Reference No — Disabled</label>
+          <input class="form-input" type="text" value="REF-2026-0042" disabled />
+        </div>
+      </div>
+    </div>
+
+    <p class="subsection-label">Textarea</p>
+    <div class="demo-panel" style="margin-bottom: var(--space-4)">
+      <div class="form-field" style="max-width:480px">
+        <label class="form-label">Key Obligations</label>
+        <textarea class="form-input" placeholder="Describe the key obligations or paste extracted text…"></textarea>
+      </div>
+    </div>
+
+    <p class="subsection-label">Select</p>
+    <div class="demo-panel" style="margin-bottom: var(--space-4)">
+      <div class="form-field" style="max-width:280px">
+        <label class="form-label">Document Type</label>
+        <select class="form-input">
+          <option>Non-Disclosure Agreement</option>
+          <option>Master Service Agreement</option>
+          <option>Letter of Intent</option>
+          <option>Assignment Agreement</option>
+          <option selected>Supplier Agreement</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="subsection-label">Checkbox &amp; Radio</p>
+    <div class="demo-panel">
+      <div class="flex-col" style="gap: var(--space-3)">
+        <label class="check-row"><input type="checkbox" checked /><span class="check-label">Auto-renewal detected</span></label>
+        <label class="check-row"><input type="checkbox" /><span class="check-label">Flag for legal review</span></label>
+        <label class="check-row"><input type="radio" name="r1" checked /><span class="check-label">Extract with Sonnet 4.6</span></label>
+        <label class="check-row"><input type="radio" name="r1" /><span class="check-label">Extract with Opus 4.6 (deep analysis)</span></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 BADGES -------------------------------------------- -->
+  <section class="section" id="badges">
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <h2 class="section-title">Status Badges <em>contract processing states</em></h2>
+    </div>
+
+    <div class="demo-panel">
+      <div class="flex-row" style="gap: var(--space-4)">
+        <div class="flex-col" style="align-items:flex-start">
+          <span class="badge badge-processing"><span class="badge-dot"></span>Processing</span>
+          <span class="token">pending / extracting</span>
+        </div>
+        <div class="flex-col" style="align-items:flex-start">
+          <span class="badge badge-success"><span class="badge-dot"></span>Complete</span>
+          <span class="token">extraction done</span>
+        </div>
+        <div class="flex-col" style="align-items:flex-start">
+          <span class="badge badge-error"><span class="badge-dot"></span>Failed</span>
+          <span class="token">error / retry</span>
+        </div>
+        <div class="flex-col" style="align-items:flex-start">
+          <span class="badge badge-info"><span class="badge-dot"></span>In Review</span>
+          <span class="token">awaiting legal</span>
+        </div>
+        <div class="flex-col" style="align-items:flex-start">
+          <span class="badge badge-draft"><span class="badge-dot"></span>Draft</span>
+          <span class="token">not submitted</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 CARDS --------------------------------------------- -->
+  <section class="section" id="cards">
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <h2 class="section-title">Cards <em>contract, empty, skeleton</em></h2>
+    </div>
+
+    <div class="grid-3">
+      <!-- Contract card -->
+      <div class="contract-card">
+        <div class="contract-card-header">
+          <div style="display:flex;align-items:center;gap:var(--space-3);flex:1;min-width:0">
+            <div class="contract-card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div style="min-width:0">
+              <div class="contract-card-name">MSA_AcmeCorp_2026.pdf</div>
+              <div class="contract-card-meta">Uploaded 12 Apr 2026</div>
+            </div>
+          </div>
+          <span class="badge badge-success"><span class="badge-dot"></span>Complete</span>
+        </div>
+        <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:var(--space-2)">Master Service Agreement</div>
+        <div class="contract-card-footer">
+          <div class="contract-card-stat"><strong>14</strong> fields extracted</div>
+          <div class="contract-card-stat">3.2 MB</div>
+        </div>
+      </div>
+
+      <!-- Empty card -->
+      <div class="card-empty">
+        <svg class="card-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <div class="card-empty-title">No contracts yet</div>
+        <p class="card-empty-text">Upload your first contract to start extracting key fields and asking questions.</p>
+        <button class="btn btn-secondary btn-sm">Upload Contract</button>
+      </div>
+
+      <!-- Skeleton card -->
+      <div class="card-skeleton">
+        <div style="display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)">
+          <div class="skeleton" style="width:36px;height:36px;border-radius:var(--radius-md)"></div>
+          <div style="flex:1">
+            <div class="skeleton skel-line skel-w-3-4"></div>
+            <div class="skeleton skel-line skel-w-1-2" style="margin-top:var(--space-2)"></div>
+          </div>
+        </div>
+        <div class="skeleton skel-line skel-w-full"></div>
+        <div class="skeleton skel-line skel-w-3-4"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid var(--color-border-subtle)">
+          <div class="skeleton skel-line skel-w-1-4" style="margin:0"></div>
+          <div class="skeleton skel-line skel-w-1-4" style="margin:0"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 DATA DISPLAY -------------------------------------- -->
+  <section class="section" id="data">
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <h2 class="section-title">Data Display <em>extracted contract fields</em></h2>
+    </div>
+
+    <div class="field-list">
+      <div class="field-row"><span class="field-label">Document Type</span><span class="field-value">Master Service Agreement</span></div>
+      <div class="field-row"><span class="field-label">Parties</span><span class="field-value">Acme Corp · Be Concrete AB</span></div>
+      <div class="field-row"><span class="field-label">Effective Date</span><span class="field-value">1 January 2026</span></div>
+      <div class="field-row"><span class="field-label">Expiry / Renewal</span><span class="field-value">31 December 2027 · Auto-renews annually</span></div>
+      <div class="field-row"><span class="field-label">Notice Period</span><span class="field-value">90 days written notice</span></div>
+      <div class="field-row"><span class="field-label">Governing Law</span><span class="field-value">Sweden</span></div>
+      <div class="field-row"><span class="field-label">Auto-Renewal</span><span class="field-value" style="color:var(--amber-600);font-weight:600">Yes — requires action</span></div>
+      <div class="field-row"><span class="field-label">Rate / Value</span><span class="field-value">SEK 480,000 / year</span></div>
+      <div class="field-row"><span class="field-label">Dispute Resolution</span><span class="field-missing">Not found</span></div>
+      <div class="field-row"><span class="field-label">Liability Cap</span><span class="field-missing">Not found</span></div>
+    </div>
+  </section>
+
+  <!-- 09 CHAT ---------------------------------------------- -->
+  <section class="section" id="chat">
+    <div class="section-header">
+      <span class="section-number">09</span>
+      <h2 class="section-title">Chat Bubbles <em>contract Q&amp;A interface</em></h2>
+    </div>
+
+    <div class="demo-panel">
+      <div class="chat-container">
+        <!-- User message -->
+        <div class="chat-message user">
+          <div class="chat-bubble">What is the notice period for termination in this contract?</div>
+          <div class="chat-meta">You · 14:32</div>
+        </div>
+
+        <!-- Agent response — from extracted fields -->
+        <div class="chat-message agent">
+          <div class="chat-bubble">The contract specifies a <strong>90-day written notice</strong> requirement for termination by either party. This applies to both voluntary termination and termination for cause.</div>
+          <div class="chat-meta">
+            <span class="chat-source-badge">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              From extracted fields
+            </span>
+            · 14:32
+          </div>
+        </div>
+
+        <!-- User message -->
+        <div class="chat-message user">
+          <div class="chat-bubble">Does this agreement imply that automatic renewal can be waived by conduct?</div>
+          <div class="chat-meta">You · 14:33</div>
+        </div>
+
+        <!-- Typing indicator -->
+        <div class="chat-message agent">
+          <div class="chat-typing">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+
+        <!-- Agent response — deep analysis -->
+        <div class="chat-message agent">
+          <div class="chat-bubble">Based on my reading of the full contract text, there is <strong>no explicit waiver-by-conduct clause</strong>. However, Clause 14.3 states that "failure to exercise a right shall not constitute waiver thereof." This language supports the position that renewal cannot be waived by conduct alone — a written waiver would be required.</div>
+          <div class="chat-meta">
+            <span class="chat-source-badge" style="background:var(--indigo-100);color:var(--indigo-700)">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              From contract document
+            </span>
+            <span class="chat-opus-badge">Deep analysis — Opus</span>
+            · 14:33
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat input preview -->
+      <div style="margin-top:var(--space-5);display:flex;gap:var(--space-3);border-top:1px solid var(--color-border);padding-top:var(--space-5)">
+        <input class="form-input" type="text" placeholder="Ask a question about this contract…" style="flex:1" />
+        <button class="btn btn-primary">Send</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 FILE UPLOAD --------------------------------------- -->
+  <section class="section" id="upload">
+    <div class="section-header">
+      <span class="section-number">10</span>
+      <h2 class="section-title">File Upload Dropzone <em>contract intake</em></h2>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <p class="subsection-label" style="margin-bottom: var(--space-3)">Default state</p>
+        <div class="dropzone-full">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div class="dropzone-heading">Drop your contract here</div>
+          <p class="dropzone-subtext">or click to browse your files</p>
+          <div class="dropzone-types">
+            <span class="dropzone-badge">PDF</span>
+            <span class="dropzone-badge">DOCX</span>
+            <span class="dropzone-badge">Max 20 MB</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="subsection-label" style="margin-bottom: var(--space-3)">Drag-active state</p>
+        <div class="dropzone-full" style="border-color:var(--blue-400);background:var(--blue-50)">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="var(--blue-500)" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <div class="dropzone-heading" style="color:var(--blue-700)">Release to upload</div>
+          <p class="dropzone-subtext">Your contract will be processed immediately</p>
+          <div class="dropzone-types">
+            <span class="dropzone-badge" style="background:var(--blue-100);color:var(--blue-700)">PDF</span>
+            <span class="dropzone-badge" style="background:var(--blue-100);color:var(--blue-700)">DOCX</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11 TOASTS -------------------------------------------- -->
+  <section class="section" id="toasts">
+    <div class="section-header">
+      <span class="section-number">11</span>
+      <h2 class="section-title">Toast Notifications <em>system feedback</em></h2>
+    </div>
+
+    <div class="toast-stack">
+      <div class="toast toast-success">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <div class="toast-body">
+          <div class="toast-title">Contract processed</div>
+          <div class="toast-text">MSA_AcmeCorp_2026.pdf — 14 fields extracted successfully.</div>
+        </div>
+        <button class="toast-close" aria-label="Dismiss">×</button>
+      </div>
+
+      <div class="toast toast-error">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <div class="toast-body">
+          <div class="toast-title">Extraction failed</div>
+          <div class="toast-text">Could not read contract_draft_v3.pdf. The file may be corrupted or password-protected.</div>
+        </div>
+        <button class="toast-close" aria-label="Dismiss">×</button>
+      </div>
+
+      <div class="toast toast-info">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div class="toast-body">
+          <div class="toast-title">Deep analysis running</div>
+          <div class="toast-text">Sonnet flagged ambiguous clauses. Escalating to Opus 4.6 for a second pass.</div>
+        </div>
+        <button class="toast-close" aria-label="Dismiss">×</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 NAVIGATION ---------------------------------------- -->
+  <section class="section" id="nav">
+    <div class="section-header">
+      <span class="section-number">12</span>
+      <h2 class="section-title">Navigation <em>expanded &amp; collapsed sidebar</em></h2>
+    </div>
+
+    <div class="nav-preview-wrap">
+      <!-- Expanded -->
+      <div class="nav-demo">
+        <div class="nav-demo-header">
+          <div class="nav-logo-mark">HQ</div>
+          <span class="nav-logo-text">Agent</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </div>
+        <ul class="nav-list-demo">
+          <li class="nav-item-demo active">
+            <a class="nav-link-demo">
+              <svg class="nav-icon-demo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Contracts
+            </a>
+          </li>
+          <li class="nav-item-demo muted">
+            <a class="nav-link-demo">
+              <svg class="nav-icon-demo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              HR
+              <span class="nav-badge-demo">Soon</span>
+            </a>
+          </li>
+          <li class="nav-item-demo muted">
+            <a class="nav-link-demo">
+              <svg class="nav-icon-demo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              Finance
+              <span class="nav-badge-demo">Soon</span>
+            </a>
+          </li>
+          <li class="nav-item-demo muted">
+            <a class="nav-link-demo">
+              <svg class="nav-icon-demo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              Compliance
+              <span class="nav-badge-demo">Soon</span>
+            </a>
+          </li>
+          <li class="nav-item-demo muted">
+            <a class="nav-link-demo">
+              <svg class="nav-icon-demo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Analytics
+              <span class="nav-badge-demo">Soon</span>
+            </a>
+          </li>
+        </ul>
+        <div class="nav-footer-demo">v0.1.0</div>
+      </div>
+
+      <!-- Collapsed -->
+      <div class="nav-demo-collapsed">
+        <div class="nav-collapsed-header">
+          <div class="nav-logo-mark">HQ</div>
+        </div>
+        <ul class="nav-collapsed-list">
+          <li class="nav-collapsed-item active">
+            <a class="nav-collapsed-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </a>
+          </li>
+          <li class="nav-collapsed-item muted">
+            <a class="nav-collapsed-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </a>
+          </li>
+          <li class="nav-collapsed-item muted">
+            <a class="nav-collapsed-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </a>
+          </li>
+          <li class="nav-collapsed-item muted">
+            <a class="nav-collapsed-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </a>
+          </li>
+          <li class="nav-collapsed-item muted">
+            <a class="nav-collapsed-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>
