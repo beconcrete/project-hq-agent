@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build output
+dist/
+build/
+out/
+bin/
+obj/
+
+# .NET
+*.user
+*.suo
+.vs/
+**/bin/
+**/obj/
+*.nupkg
+*.snupkg
+
+# Azure Functions
+local.settings.json
+.azure/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Azure SWA
+.swa/
+staticwebapp.config.json.bak
+
+# Dapr
+.dapr/
