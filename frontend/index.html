@@ -40,7 +40,7 @@
         <nav class="sidebar-nav" aria-label="Main navigation">
           <ul class="nav-list">
             <li class="nav-item active" data-module="contracts">
-              <a href="/contracts" class="nav-link">
+              <a href="#" class="nav-link">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
@@ -49,6 +49,15 @@
                   <polyline points="10 9 9 9 8 9"/>
                 </svg>
                 <span class="nav-label">Contracts</span>
+              </a>
+            </li>
+            <li class="nav-item" data-module="auth-test">
+              <a href="#" class="nav-link">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <polyline points="9 12 11 14 15 10"/>
+                </svg>
+                <span class="nav-label">Auth Test</span>
               </a>
             </li>
             <!-- Future modules — not yet implemented -->
@@ -178,7 +187,7 @@
 
         <div class="page-content" id="pageContent">
           <!-- Contracts module -->
-          <section class="module contracts-module">
+          <section class="module contracts-module" data-module="contracts">
             <div class="module-header">
               <h1>Contracts</h1>
               <p class="module-subtitle">Upload, extract, and query your contracts with AI assistance.</p>
@@ -194,6 +203,24 @@
               <p>Upload your first contract to get started. HQ Agent will extract key fields and let you ask questions about it.</p>
               <button class="btn btn-primary" disabled>Upload Contract</button>
               <span class="coming-soon-note">Contract upload coming in the next release</span>
+            </div>
+          </section>
+          <!-- Auth Test module -->
+          <section class="module auth-test-module" data-module="auth-test" hidden>
+            <div class="module-header">
+              <h1>Auth Test</h1>
+              <p class="module-subtitle">Check role-based authorization for the signed-in user against Be Concrete ID.</p>
+            </div>
+            <div class="auth-test-panel">
+              <p class="auth-test-description">
+                <strong>User</strong> — requires the <code>user</code> or <code>admin</code> role.<br>
+                <strong>Admin</strong> — requires the <code>admin</code> role.
+              </p>
+              <div class="auth-test-actions">
+                <button id="authTestUserBtn" class="btn btn-ghost">User</button>
+                <button id="authTestAdminBtn" class="btn btn-primary">Admin</button>
+              </div>
+              <pre id="authTestResult" class="auth-test-result" hidden></pre>
             </div>
           </section>
         </div>

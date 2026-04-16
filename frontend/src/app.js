@@ -73,6 +73,76 @@
       showLogin(err.code || "service-error");
     });
 
+  /* ---- Module switching ------------------------------------- */
+  var MODULE_LABELS = { contracts: "Contracts", "auth-test": "Auth Test" };
+
+  function switchModule(name) {
+    document.querySelectorAll(".module[data-module]").forEach(function (el) {
+      el.hidden = el.dataset.module !== name;
+    });
+    document.querySelectorAll(".nav-item[data-module]").forEach(function (el) {
+      el.classList.toggle("active", el.dataset.module === name);
+    });
+    if (breadcrumbCurrent) {
+      breadcrumbCurrent.textContent = MODULE_LABELS[name] || name;
+    }
+  }
+
+  document
+    .querySelectorAll(".nav-item[data-module]:not(.coming-soon) .nav-link")
+    .forEach(function (link) {
+      link.addEventListener("click", function (e) {
+        e.preventDefault();
+        var module = link.closest(".nav-item").dataset.module;
+        switchModule(module);
+        if (isMobile()) closeMobileSidebar();
+      });
+    });
+
+  /* ---- Auth Test -------------------------------------------- */
+  var authTestResult = document.getElementById("authTestResult");
+
+  function runAuthTest(action) {
+    authTestResult.hidden = false;
+    authTestResult.className = "auth-test-result auth-test-loading";
+    authTestResult.textContent = "Checking…";
+
+    fetch("/api/auth-test?action=" + action, {
+      headers: { "X-Auth-Token": "Bearer " + HQAuth.getToken() },
+    })
+      .then(function (res) {
+        return res.json().then(function (body) {
+          return { ok: res.ok, body: body };
+        });
+      })
+      .then(function (result) {
+        authTestResult.className =
+          "auth-test-result " +
+          (result.ok ? "auth-test-allowed" : "auth-test-denied");
+        authTestResult.textContent = result.ok
+          ? "Allowed\nRoles: " + (result.body.roles || []).join(", ")
+          : "Not allowed\nRoles: " + (result.body.roles || []).join(", ");
+      })
+      .catch(function () {
+        authTestResult.className = "auth-test-result auth-test-error";
+        authTestResult.textContent = "Error: could not reach auth service";
+      });
+  }
+
+  var authTestUserBtn = document.getElementById("authTestUserBtn");
+  var authTestAdminBtn = document.getElementById("authTestAdminBtn");
+
+  if (authTestUserBtn) {
+    authTestUserBtn.addEventListener("click", function () {
+      runAuthTest("user");
+    });
+  }
+  if (authTestAdminBtn) {
+    authTestAdminBtn.addEventListener("click", function () {
+      runAuthTest("admin");
+    });
+  }
+
   /* ---- Sidebar ---------------------------------------------- */
   var sidebar = document.getElementById("sidebar");
   var sidebarToggle = document.getElementById("sidebarToggle");
