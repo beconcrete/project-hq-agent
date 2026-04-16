@@ -69,20 +69,32 @@ Always use prompt caching for system prompts and extraction schemas. Use Message
 This app uses Auth0 for sign-in and usermgmt (`https://usermanagement.beconcrete.se`) for access control.
 App ID is `hqagents`. Only users with the `admin` role may access the app.
 
-After login, the frontend calls `GET /api/v1/me` on usermgmt with the Auth0 ID token:
+### Auth flow
 
-```js
-const res = await fetch("https://usermanagement.beconcrete.se/api/v1/me", {
-  headers: { "X-Auth-Token": `Bearer ${idToken}` },
-});
-const { apps } = await res.json();
-if (!apps.includes("hqagents")) // deny access
-```
+1. Frontend calls `Auth0.loginWithRedirect()` → Auth0 login page
+2. Auth0 redirects back with `?code=` → `handleRedirectCallback()` exchanges it for tokens (ID token kept in memory only)
+3. Frontend calls `GET /api/me` with the ID token in `X-Auth-Token`
+4. `RequireAccessMiddleware` forwards the token to usermgmt server-to-server, checks the user has the `hqagents` app
+5. `GetMe` (`api/GetMe.cs`) returns `{ userId, apps }` — frontend grants access
 
-All Azure Functions validate the same token via `RequireAccessMiddleware` (registered in `Program.cs`).
-The public exception is `GetConfig` (`/api/config`), which returns Auth0 domain + client ID to the SPA before login.
+The frontend never calls usermanagement directly. Routing through `/api/me` avoids browser CORS restrictions.
+
+If the user is authenticated but lacks the role, the auth gate shows a "Sign out" button instead of "Sign in" so they can switch accounts.
+
+### API auth middleware
+
+All Azure Functions validate the token via `RequireAccessMiddleware` (registered in `Program.cs`).
+It reads `X-Auth-Token`, calls usermanagement, and blocks with 403 if the user is missing or lacks the app.
+`context.Items["userId"]` is set for downstream functions to use.
+
+### Auth0 config
 
 Auth0 config is stored as Azure SWA application settings: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_ID`.
+The deploy workflow injects them into `frontend/src/auth.js` at deploy time via `envsubst`.
+
+### CSP
+
+The `staticwebapp.config.json` CSP includes `worker-src blob:` to allow Auth0's SDK to spawn its token-cache web worker.
 
 ## GitHub Workflows
 
