@@ -49,6 +49,26 @@ Always use prompt caching for system prompts and extraction schemas. Use Message
 - Custom auth tokens go in `X-Auth-Token` header (NOT `Authorization` — SWA intercepts that)
 - Admin-facing functions must be named `management-*` (NOT `admin-*` — reserved by SWA)
 
+## Authorization
+
+This app uses Auth0 for sign-in and usermgmt (`https://usermanagement.beconcrete.se`) for access control.
+App ID is `hqagents`. Only users with the `admin` role may access the app.
+
+After login, the frontend calls `GET /api/v1/me` on usermgmt with the Auth0 ID token:
+
+```js
+const res = await fetch("https://usermanagement.beconcrete.se/api/v1/me", {
+  headers: { "X-Auth-Token": `Bearer ${idToken}` },
+});
+const { apps } = await res.json();
+if (!apps.includes("hqagents")) // deny access
+```
+
+All Azure Functions validate the same token via `RequireAccessMiddleware` (registered in `Program.cs`).
+The public exception is `GetConfig` (`/api/config`), which returns Auth0 domain + client ID to the SPA before login.
+
+Auth0 config is stored as Azure SWA application settings: `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_ID`.
+
 ## GitHub Workflows
 
 All workflow files include `concurrency` to prevent race conditions:

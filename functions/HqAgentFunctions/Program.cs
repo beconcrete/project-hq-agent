@@ -1,11 +1,16 @@
+using HqAgent.Functions.Middleware;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureFunctionsWorkerDefaults(app =>
+    {
+        app.UseMiddleware<RequireAccessMiddleware>();
+    })
     .ConfigureServices(services =>
     {
+        services.AddHttpClient();
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
     })

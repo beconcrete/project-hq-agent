@@ -430,6 +430,78 @@ body {
   color: var(--color-text-muted);
 }
 
+/* --- Auth Gate (Login Screen) ------------------------------ */
+.auth-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sidebar-bg);
+}
+
+.login-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-8);
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  box-shadow: var(--shadow-md);
+}
+
+.login-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.login-logo-text {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.login-tagline {
+  color: var(--color-text-secondary);
+  font-size: 13.5px;
+  text-align: center;
+  margin-top: calc(-1 * var(--space-3));
+}
+
+.login-btn {
+  width: 100%;
+}
+
+.auth-error {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  color: #dc2626;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* --- Topbar User Widget ------------------------------------ */
+.topbar-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.topbar-user-name {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
 /* --- Buttons ----------------------------------------------- */
 .btn {
   display: inline-flex;
@@ -461,6 +533,22 @@ body {
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-border-subtle);
+  color: var(--color-text-primary);
+}
+
+.btn-sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: 12.5px;
 }
 
 /* --- Mobile Overlay ---------------------------------------- */

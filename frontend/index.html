@@ -5,9 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HQ Agent</title>
     <link rel="stylesheet" href="/src/styles/app.css" />
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
   </head>
   <body>
-    <div class="app-layout">
+
+    <!-- Login gate — shown while unauthenticated -->
+    <div id="authGate" class="auth-gate">
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="logo-mark">HQ</span>
+          <span class="login-logo-text">Agent</span>
+        </div>
+        <p class="login-tagline">Company Headquarters</p>
+        <p id="authError" class="auth-error" hidden></p>
+        <button id="loginBtn" class="btn btn-primary login-btn">Sign in</button>
+      </div>
+    </div>
+
+    <!-- App shell — hidden until auth succeeds -->
+    <div id="appLayout" class="app-layout" hidden>
       <!-- Sidebar -->
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -153,6 +169,10 @@
             <span class="breadcrumb-sep">›</span>
             <span class="breadcrumb-current" id="breadcrumbCurrent">Contracts</span>
           </div>
+          <div class="topbar-user">
+            <span class="topbar-user-name" id="topbarUserName"></span>
+            <button class="btn btn-ghost btn-sm" id="signOutBtn">Sign out</button>
+          </div>
         </header>
 
         <div class="page-content" id="pageContent">
@@ -182,6 +202,7 @@
     <!-- Mobile overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
+    <script src="/src/auth.js"></script>
     <script src="/src/app.js"></script>
   </body>
 </html>
