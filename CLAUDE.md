@@ -63,6 +63,13 @@ Always use prompt caching for system prompts and extraction schemas. Use Message
 
 - Custom auth tokens go in `X-Auth-Token` header (NOT `Authorization` — SWA intercepts that)
 - Admin-facing functions must be named `management-*` (NOT `admin-*` — reserved by SWA)
+- `WriteAsJsonAsync` resets the HTTP status to 200. Always set `res.StatusCode` **after** calling it:
+  ```csharp
+  var res = req.CreateResponse();
+  await res.WriteAsJsonAsync(body);
+  res.StatusCode = HttpStatusCode.Forbidden; // set last
+  return res;
+  ```
 
 ## Authorization
 
