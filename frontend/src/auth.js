@@ -80,27 +80,41 @@
       .then(function (isAuthenticated) {
         if (!isAuthenticated) return null;
 
+        var _claims;
         return _auth0
           .getIdTokenClaims()
           .then(function (claims) {
+            _claims = claims;
             _idToken = claims.__raw;
             return _verifyAccess(_idToken);
           })
           .then(function (me) {
-            // Attach display name from Auth0 claims (populated later by app.js)
             _userInfo = me;
-            return _auth0.getIdTokenClaims();
-          })
-          .then(function (claims) {
             _userInfo.displayName =
-              claims.name || claims.email || claims.sub || "";
+              _claims.name || _claims.email || _claims.sub || "";
             return _userInfo;
           });
       });
   }
 
   function login() {
-    _auth0.loginWithRedirect();
+    if (_auth0) {
+      _auth0.loginWithRedirect();
+      return;
+    }
+    // init() failed before the Auth0 client was created — retry config + redirect
+    _loadConfig()
+      .then(function (config) {
+        return window.auth0.createAuth0Client({
+          domain: config.auth0Domain,
+          clientId: config.auth0ClientId,
+          authorizationParams: { redirect_uri: window.location.origin },
+        });
+      })
+      .then(function (client) {
+        _auth0 = client;
+        return client.loginWithRedirect();
+      });
   }
 
   function logout() {

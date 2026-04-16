@@ -3,6 +3,11 @@
    Responsive layout: expandable sidebar + main content area
    ============================================================ */
 
+/* Ensure CSS display rules never override the HTML hidden attribute */
+[hidden] {
+  display: none !important;
+}
+
 /* --- Reset & Base ------------------------------------------ */
 *,
 *::before,
