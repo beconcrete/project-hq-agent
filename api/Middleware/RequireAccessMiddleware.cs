@@ -6,11 +6,11 @@ using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace HqAgent.Functions.Middleware;
+namespace HqAgent.Api.Middleware;
 
 /// <summary>
 /// Validates every incoming HTTP request against usermgmt before the function runs.
-/// Non-HTTP triggers (blob, queue) and functions in <see cref="PublicFunctions"/> pass through.
+/// Non-HTTP triggers and functions in <see cref="PublicFunctions"/> pass through.
 /// </summary>
 public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
 {
@@ -84,7 +84,6 @@ public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        // Make userId available to downstream function handlers
         context.Items["userId"] = me.UserId;
         await next(context);
     }

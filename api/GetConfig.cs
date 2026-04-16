@@ -4,7 +4,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 
-namespace HqAgent.Functions;
+namespace HqAgent.Api;
 
 /// <summary>
 /// Public endpoint — returns Auth0 config needed by the frontend SPA.
