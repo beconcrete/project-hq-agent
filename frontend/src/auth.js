@@ -90,6 +90,7 @@
             _userInfo = me;
             _userInfo.displayName =
               _claims.name || _claims.email || _claims.sub || "";
+            _userInfo.roles = me.roles || [];
             return _userInfo;
           });
       });
@@ -123,11 +124,20 @@
     return _userInfo;
   }
 
+  // Admin is a superset — returns true if the user has the given role or admin
+  function hasRole(role) {
+    if (!_userInfo || !_userInfo.roles) return false;
+    var roles = _userInfo.roles;
+    if (roles.indexOf("admin") !== -1) return true;
+    return roles.indexOf(role) !== -1;
+  }
+
   global.HQAuth = {
     init: init,
     login: login,
     logout: logout,
     getToken: getToken,
     getUserInfo: getUserInfo,
+    hasRole: hasRole,
   };
 })(window);

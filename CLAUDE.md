@@ -59,6 +59,17 @@ See [azure-resources.md](./azure-resources.md) for all Azure resource names, the
 
 Always use prompt caching for system prompts and extraction schemas. Use Message Batches API for bulk jobs.
 
+## App Settings
+
+These must be configured in two places: the Azure SWA portal (Settings → Configuration → Application settings) and `api/local.settings.json` for local development.
+
+| Setting | Description |
+|---|---|
+| `APP_ID` | Be Concrete ID app identifier — `hqagents` |
+| `STORAGE_CONNECTION_STRING` | Connection string for `hqagentstorage` (Azure portal → Storage account → Access keys) |
+
+`AUTH0_DOMAIN` and `AUTH0_CLIENT_ID` are GitHub secrets only — injected at build time, not runtime app settings.
+
 ## Azure Function API
 
 - Custom auth tokens go in `X-Auth-Token` header (NOT `Authorization` — SWA intercepts that)
