@@ -1,5 +1,5 @@
 /* HQ Agent — Auth module
-   Auth0 handles sign-in; usermgmt (usermanagement.beconcrete.se) gates app access.
+   Auth0 handles sign-in; Be Concrete ID (id.beconcrete.se) gates app access.
 
    AUTH0_DOMAIN and AUTH0_CLIENT_ID are injected at deploy time by the
    GitHub Actions workflow (envsubst). The placeholders below are replaced

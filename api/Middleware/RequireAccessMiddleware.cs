@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace HqAgent.Api.Middleware;
 
 /// <summary>
-/// Validates every incoming HTTP request against usermgmt before the function runs.
+/// Validates every incoming HTTP request against Be Concrete ID before the function runs.
 /// Non-HTTP triggers and functions in <see cref="PublicFunctions"/> pass through.
 /// </summary>
 public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
@@ -61,7 +61,7 @@ public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
         {
             var client = _httpFactory.CreateClient();
             using var hmReq = new HttpRequestMessage(
-                HttpMethod.Get, "https://usermanagement.beconcrete.se/api/v1/me");
+                HttpMethod.Get, "https://id.beconcrete.se/api/v1/me");
             hmReq.Headers.Add("X-Auth-Token", $"Bearer {token}");
 
             using var hmRes = await client.SendAsync(hmReq);
@@ -76,7 +76,7 @@ public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error contacting usermgmt");
+            _logger.LogError(ex, "Error contacting Be Concrete ID");
             await WriteResponseAsync(context, req, HttpStatusCode.ServiceUnavailable, "Auth service unavailable");
             return;
         }

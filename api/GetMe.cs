@@ -7,7 +7,7 @@ namespace HqAgent.Api;
 
 /// <summary>
 /// Returns the authenticated user's profile. Auth is enforced by RequireAccessMiddleware.
-/// The frontend calls this instead of hitting usermanagement.beconcrete.se directly,
+/// The frontend calls this instead of hitting id.beconcrete.se directly,
 /// avoiding cross-origin requests from the browser.
 /// </summary>
 public class GetMe
