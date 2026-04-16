@@ -14,9 +14,12 @@ namespace HqAgent.Api.Middleware;
 /// </summary>
 public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
 {
-    /// <summary>Functions that do not require an authenticated user.</summary>
+    /// <summary>
+    /// Functions that do not require an authenticated user.
+    /// Add function names here for any future public endpoints (e.g. health checks).
+    /// </summary>
     private static readonly HashSet<string> PublicFunctions =
-        new(StringComparer.OrdinalIgnoreCase) { nameof(GetConfig) };
+        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _appId;

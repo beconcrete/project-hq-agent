@@ -1,12 +1,17 @@
 /* HQ Agent — Auth module
    Auth0 handles sign-in; usermgmt (usermanagement.beconcrete.se) gates app access.
 
+   AUTH0_DOMAIN and AUTH0_CLIENT_ID are injected at deploy time by the
+   GitHub Actions workflow (envsubst). The placeholders below are replaced
+   before the files are uploaded to the Static Web App.
+
    Token is kept in memory only — never written to localStorage or sessionStorage.
-   Config (Auth0 domain + clientId) is fetched from /api/config at startup.
 */
 (function (global) {
   "use strict";
 
+  var AUTH0_DOMAIN = "${AUTH0_DOMAIN}";
+  var AUTH0_CLIENT_ID = "${AUTH0_CLIENT_ID}";
   var USERMGMT_URL = "https://usermanagement.beconcrete.se/api/v1/me";
   var APP_ID = "hqagents";
 
@@ -14,10 +19,15 @@
   var _idToken = null; // in-memory only
   var _userInfo = null;
 
-  function _loadConfig() {
-    return fetch("/api/config").then(function (res) {
-      if (!res.ok) throw new Error("Failed to load app config");
-      return res.json();
+  function _createClient() {
+    return window.auth0.createAuth0Client({
+      domain: AUTH0_DOMAIN,
+      clientId: AUTH0_CLIENT_ID,
+      authorizationParams: {
+        redirect_uri: window.location.origin,
+      },
+      useRefreshTokens: true,
+      cacheLocation: "memory",
     });
   }
 
@@ -49,22 +59,10 @@
   }
 
   function init() {
-    return _loadConfig()
-      .then(function (config) {
-        return window.auth0.createAuth0Client({
-          domain: config.auth0Domain,
-          clientId: config.auth0ClientId,
-          authorizationParams: {
-            redirect_uri: window.location.origin,
-          },
-          useRefreshTokens: true,
-          cacheLocation: "memory",
-        });
-      })
+    return _createClient()
       .then(function (client) {
         _auth0 = client;
 
-        // Handle redirect callback after Auth0 login
         if (
           window.location.search.indexOf("code=") !== -1 &&
           window.location.search.indexOf("state=") !== -1
@@ -102,19 +100,11 @@
       _auth0.loginWithRedirect();
       return;
     }
-    // init() failed before the Auth0 client was created — retry config + redirect
-    _loadConfig()
-      .then(function (config) {
-        return window.auth0.createAuth0Client({
-          domain: config.auth0Domain,
-          clientId: config.auth0ClientId,
-          authorizationParams: { redirect_uri: window.location.origin },
-        });
-      })
-      .then(function (client) {
-        _auth0 = client;
-        return client.loginWithRedirect();
-      });
+    // init() failed before the Auth0 client was created — retry
+    _createClient().then(function (client) {
+      _auth0 = client;
+      return client.loginWithRedirect();
+    });
   }
 
   function logout() {
