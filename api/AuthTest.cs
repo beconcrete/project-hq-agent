@@ -53,8 +53,9 @@ public class AuthTest
             _       => false
         };
 
-        var res = req.CreateResponse(allowed ? HttpStatusCode.OK : HttpStatusCode.Forbidden);
+        var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new { allowed, roles = roleIds.ToArray() });
+        res.StatusCode = allowed ? HttpStatusCode.OK : HttpStatusCode.Forbidden;
         return res;
     }
 
