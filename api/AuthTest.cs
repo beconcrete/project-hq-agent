@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
@@ -10,7 +9,7 @@ namespace HqAgent.Api;
 /// Tests role-based authorization for the signed-in user.
 /// GET /api/auth-test?action=admin  — requires the "admin" role
 /// GET /api/auth-test?action=user   — requires the "user" or "admin" role
-/// Auth (app access) is enforced by RequireAccessMiddleware before this runs.
+/// App access is enforced by RequireAccessMiddleware before this runs.
 /// </summary>
 public class AuthTest
 {
@@ -30,34 +29,37 @@ public class AuthTest
     {
         var action = req.Query["action"] ?? "";
 
-        var token = req.Headers.TryGetValues("x-auth-token", out var vals)
-            ? vals.FirstOrDefault()?.Replace("Bearer ", "").Trim()
-            : null;
-
-        var client = _httpFactory.CreateClient();
-        using var rolesReq = new HttpRequestMessage(
-            HttpMethod.Get, $"https://id.beconcrete.se/api/v1/roles?appId={_appId}");
-        rolesReq.Headers.Add("X-Auth-Token", $"Bearer {token}");
-
-        using var rolesRes = await client.SendAsync(rolesReq);
-        var roles = rolesRes.IsSuccessStatusCode
-            ? await rolesRes.Content.ReadFromJsonAsync<List<RoleEntry>>() ?? []
-            : [];
-
-        var roleIds = roles.Select(r => r.RoleId).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        bool allowed = action switch
+        var requiredRole = action switch
         {
-            "admin" => roleIds.Contains("admin"),
-            "user"  => roleIds.Contains("user") || roleIds.Contains("admin"),
-            _       => false
+            "admin" => Roles.Admin,
+            "user"  => Roles.User,
+            _       => null
         };
 
+        if (requiredRole is null)
+        {
+            var bad = req.CreateResponse();
+            await bad.WriteStringAsync("Invalid action");
+            bad.StatusCode = HttpStatusCode.BadRequest;
+            return bad;
+        }
+
+        RoleGuard guard;
+        try
+        {
+            guard = await RoleGuard.CheckAsync(req, _httpFactory, _appId, requiredRole);
+        }
+        catch (Exception)
+        {
+            var err = req.CreateResponse();
+            await err.WriteStringAsync("Auth service unavailable");
+            err.StatusCode = HttpStatusCode.ServiceUnavailable;
+            return err;
+        }
+
         var res = req.CreateResponse();
-        await res.WriteAsJsonAsync(new { allowed, roles = roleIds.ToArray() });
-        res.StatusCode = allowed ? HttpStatusCode.OK : HttpStatusCode.Forbidden;
+        await res.WriteAsJsonAsync(new { allowed = guard.Allowed, roles = guard.RoleIds.ToArray() });
+        res.StatusCode = guard.Allowed ? HttpStatusCode.OK : HttpStatusCode.Forbidden;
         return res;
     }
-
-    private record RoleEntry(string AppId, string RoleId, string RoleName);
 }

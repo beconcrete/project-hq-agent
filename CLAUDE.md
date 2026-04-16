@@ -71,6 +71,25 @@ Always use prompt caching for system prompts and extraction schemas. Use Message
   return res;
   ```
 
+### Role-based authorization
+
+`RequireAccessMiddleware` gates app access (is the user in `hqagents`?). For feature-level role checks inside a function, use the `RoleGuard` helper — do not inline your own roles fetch.
+
+Roles are fetched **fresh on every API call** — no caching. Role changes take effect immediately.
+
+```csharp
+var guard = await RoleGuard.CheckAsync(req, _httpFactory, _appId, Roles.Admin);
+if (!guard.Allowed)
+    return req.CreateResponse(HttpStatusCode.Forbidden);
+```
+
+Use the `Roles` constants (`Roles.Admin`, `Roles.User`) — no magic strings.
+
+| Role | Rule |
+|---|---|
+| `admin` | Admin only |
+| `user` | User or admin |
+
 ## Authorization
 
 This app uses Auth0 for sign-in and Be Concrete ID (`https://id.beconcrete.se`) for access control.
