@@ -37,8 +37,8 @@
     })
       .then(function (res) {
         if (res.status === 403) {
-          var err = new Error("blocked");
-          err.code = "blocked";
+          var err = new Error("no-access");
+          err.code = "no-access";
           throw err;
         }
         if (!res.ok) {
