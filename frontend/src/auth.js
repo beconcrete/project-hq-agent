@@ -12,7 +12,7 @@
 
   var AUTH0_DOMAIN = "${AUTH0_DOMAIN}";
   var AUTH0_CLIENT_ID = "${AUTH0_CLIENT_ID}";
-  var USERMGMT_URL = "https://usermanagement.beconcrete.se/api/v1/me";
+  var ME_URL = "/api/me";
   var APP_ID = "hqagents";
 
   var _auth0 = null;
@@ -32,7 +32,7 @@
   }
 
   function _verifyAccess(token) {
-    return fetch(USERMGMT_URL, {
+    return fetch(ME_URL, {
       headers: { "X-Auth-Token": "Bearer " + token },
     })
       .then(function (res) {
