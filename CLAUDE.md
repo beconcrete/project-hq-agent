@@ -10,7 +10,10 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 /frontend                    # Azure Static Web App (HTML/CSS/JS)
   /public                    # Static assets
   /src                       # App source (components, pages, styles)
-/functions                   # Azure Functions (C#, isolated worker model)
+/api                         # SWA-managed HTTP functions — served at /api/* (C#, isolated worker)
+  /Middleware                # RequireAccessMiddleware (auth on every HTTP request)
+/functions                   # Separate Azure Function App — background/event-driven only (C#, isolated worker)
+  /HqAgentFunctions          # Blob triggers, queue triggers — NOT browser-facing
 /agents
   /contract-orchestrator-agent   # C# .NET agent: ingestion + extraction
   /contract-chat-agent           # C# .NET agent: contract Q&A
@@ -26,12 +29,24 @@ See [azure-resources.md](./azure-resources.md) for all Azure resource names, the
 ## Architecture Decisions
 
 - **Frontend**: Azure Static Web App (CDN-distributed, free tier)
-- **API Functions**: Azure Functions (C#, isolated worker) hosted at `/api` on the SWA
+- **API (`/api/`)**: SWA-managed HTTP functions, C# isolated worker. Deployed by the SWA workflow (`api_location: api`). Served at `/api/*`. HTTP triggers only — no blob/queue triggers here.
+- **Functions (`/functions/`)**: Separate Azure Function App (`hq-agent-function-app`). Background and event-driven work only — blob triggers, queue triggers. Never called directly by the browser.
 - **Agents**: Containerized .NET services on Azure App Service with Dapr sidecar
 - **Storage**: Azure Blob (contract files), Queue (work queue), Table (extracted data)
 - **Real-time**: WebSockets (NOT SignalR, NOT polling)
 - **Queue**: Azure Queue Storage (NOT Service Bus)
 - **NO**: Kubernetes, Logic Apps, Service Bus, SignalR
+
+### What goes where: api/ vs functions/
+
+| Belongs in `api/` | Belongs in `functions/` |
+|---|---|
+| Anything the browser calls (`/api/*`) | Blob triggers (e.g. new contract uploaded) |
+| Auth helpers (`GetConfig`, future session endpoints) | Queue triggers (e.g. contract processing) |
+| Data read/write endpoints for the UI | Timer triggers |
+| File upload endpoints | Anything that runs in the background without a browser request |
+
+**Rule of thumb**: if the frontend JavaScript calls it, it goes in `api/`. If it reacts to a storage event or a queue message, it goes in `functions/`. Never put blob/queue triggers in `api/` and never put HTTP endpoints meant for the browser in `functions/`.
 
 ## AI Model Usage
 
