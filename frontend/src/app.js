@@ -8,6 +8,7 @@
   var loginBtn = document.getElementById("loginBtn");
   var authError = document.getElementById("authError");
   var signOutBtn = document.getElementById("signOutBtn");
+  var authSignOutBtn = document.getElementById("authSignOutBtn");
   var topbarUserName = document.getElementById("topbarUserName");
 
   var AUTH_ERRORS = {
@@ -33,8 +34,12 @@
       authError.textContent =
         AUTH_ERRORS[errorCode] || "Sign-in failed. Please try again.";
       authError.hidden = false;
+      loginBtn.hidden = true;
+      authSignOutBtn.hidden = false;
     } else {
       authError.hidden = true;
+      loginBtn.hidden = false;
+      authSignOutBtn.hidden = true;
     }
   }
 
@@ -46,6 +51,12 @@
 
   if (signOutBtn) {
     signOutBtn.addEventListener("click", function () {
+      HQAuth.logout();
+    });
+  }
+
+  if (authSignOutBtn) {
+    authSignOutBtn.addEventListener("click", function () {
       HQAuth.logout();
     });
   }
