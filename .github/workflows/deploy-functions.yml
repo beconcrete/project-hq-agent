@@ -1,0 +1,39 @@
+name: Deploy Functions to Azure Function App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "functions/**"
+      - ".github/workflows/deploy-functions.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test_and_deploy:
+    runs-on: ubuntu-latest
+    name: Test and Deploy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Run tests
+        run: dotnet test functions/HqAgentFunctions.Tests/HqAgentFunctions.Tests.csproj --configuration Release
+
+      - name: Publish
+        run: dotnet publish functions/HqAgentFunctions/HqAgentFunctions.csproj --configuration Release --output functions/publish
+
+      - name: Deploy to Azure Function App
+        uses: Azure/functions-action@v1
+        with:
+          app-name: hq-agent-function-app
+          package: functions/publish
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}

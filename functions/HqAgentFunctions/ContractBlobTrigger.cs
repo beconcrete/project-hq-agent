@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +10,8 @@ namespace HqAgent.Functions;
 /// </summary>
 public class ContractBlobTrigger
 {
+    private const string ContainerName = "contracts";
+
     private readonly ILogger<ContractBlobTrigger> _logger;
 
     public ContractBlobTrigger(ILogger<ContractBlobTrigger> logger)
@@ -19,21 +22,30 @@ public class ContractBlobTrigger
     [Function(nameof(ContractBlobTrigger))]
     [QueueOutput("contract-processing", Connection = "AzureWebJobsStorage")]
     public string Run(
-        [BlobTrigger("contracts/{name}", Connection = "AzureWebJobsStorage")] byte[] contractBlob,
+        [BlobTrigger("contracts/{correlationId}/{name}", Connection = "AzureWebJobsStorage")] byte[] contractBlob,
+        string correlationId,
         string name)
     {
-        _logger.LogInformation("New contract uploaded: {Name} ({Size} bytes)", name, contractBlob.Length);
+        _logger.LogInformation(
+            "New contract uploaded: {CorrelationId}/{Name} ({Size} bytes)",
+            correlationId, name, contractBlob.Length);
 
-        // Enqueue a processing message with the blob name
-        // The Contract Orchestrator Agent will pick this up via Dapr bindings
-        var message = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            blobName = name,
-            uploadedAt = DateTime.UtcNow,
-            correlationId = Guid.NewGuid().ToString()
-        });
+        var message = BuildMessage(correlationId, name, ContainerName);
 
-        _logger.LogInformation("Enqueued processing message for contract: {Name}", name);
+        _logger.LogInformation(
+            "Enqueued processing message for correlationId: {CorrelationId}", correlationId);
+
         return message;
+    }
+
+    public static string BuildMessage(string correlationId, string fileName, string containerName)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            blobName = $"{correlationId}/{fileName}",
+            correlationId,
+            uploadedAt = DateTime.UtcNow,
+            containerName,
+        });
     }
 }
