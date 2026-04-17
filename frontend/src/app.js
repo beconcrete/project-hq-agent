@@ -26,6 +26,7 @@
     }
     initSidebar();
     initContracts();
+    switchModule("home");
   }
 
   function showLogin(errorCode) {

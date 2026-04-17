@@ -148,9 +148,9 @@ body {
 }
 
 /* Landing view */
-.landing-module {
+.landing-module:not([hidden]) {
   height: 100%;
-  display: flex !important;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
