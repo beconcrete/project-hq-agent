@@ -215,8 +215,8 @@
 
   if (contractFileInput) {
     contractFileInput.addEventListener("change", function () {
-      if (contractFileInput.files && contractFileInput.files[0]) {
-        uploadFile(contractFileInput.files[0]);
+      if (contractFileInput.files && contractFileInput.files.length > 0) {
+        Array.prototype.forEach.call(contractFileInput.files, uploadFile);
         contractFileInput.value = "";
       }
     });
@@ -236,8 +236,10 @@
     contractsDropzone.addEventListener("drop", function (e) {
       e.preventDefault();
       contractsDropzone.classList.remove("drag-active");
-      var file = e.dataTransfer && e.dataTransfer.files[0];
-      if (file) uploadFile(file);
+      var files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        Array.prototype.forEach.call(files, uploadFile);
+      }
     });
   }
 
