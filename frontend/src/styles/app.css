@@ -139,11 +139,12 @@ body {
   overflow: hidden;
 }
 
-.sidebar-logo-img {
-  height: 28px;
-  width: auto;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* Landing view */
