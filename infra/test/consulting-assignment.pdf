@@ -1,0 +1,84 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 2142 >>
+stream
+BT
+/F1 11 Tf
+50 800 Td
+14 TL
+(CONSULTING SERVICES AGREEMENT) Tj T*
+() Tj T*
+(This Consulting Services Agreement \("Agreement"\) is entered into as of April 1, 2026,) Tj T*
+(by and between:) Tj T*
+() Tj T*
+(Client:     ABC Technologies AB, org. no. 556789-0123) Tj T*
+(            Kungsgatan 12, 111 43 Stockholm, Sweden) Tj T*
+(            \("Client"\)) Tj T*
+() Tj T*
+(Consultant: Bjorn Eriksen Consulting AB, org. no. 556901-2345) Tj T*
+(            Sveavagen 55, 113 59 Stockholm, Sweden) Tj T*
+(            \("Consultant"\)) Tj T*
+() Tj T*
+(1. SERVICES) Tj T*
+(The Consultant agrees to provide software architecture and development consulting) Tj T*
+(services as reasonably requested by the Client.) Tj T*
+() Tj T*
+(2. TERM) Tj T*
+(This Agreement commences on April 1, 2026, and continues for a period of six \(6\) months,) Tj T*
+(ending on September 30, 2026, unless terminated earlier.) Tj T*
+() Tj T*
+(3. COMPENSATION) Tj T*
+(The Client shall pay the Consultant at a rate of SEK 1,200 per hour.) Tj T*
+(Invoices are issued monthly and payable within 30 days of receipt.) Tj T*
+() Tj T*
+(4. NOTICE PERIOD) Tj T*
+(Either party may terminate this Agreement with thirty \(30\) days' written notice.) Tj T*
+() Tj T*
+(5. CONFIDENTIALITY) Tj T*
+(The Consultant agrees to keep all Client information confidential during and after) Tj T*
+(the term of this Agreement.) Tj T*
+() Tj T*
+(6. INTELLECTUAL PROPERTY) Tj T*
+(All work product created by the Consultant under this Agreement is the exclusive) Tj T*
+(property of the Client upon full payment.) Tj T*
+() Tj T*
+(7. GOVERNING LAW) Tj T*
+(This Agreement shall be governed by and construed in accordance with the laws of Sweden.) Tj T*
+(Any disputes shall be resolved in Stockholm District Court.) Tj T*
+() Tj T*
+(8. AUTO-RENEWAL) Tj T*
+(This Agreement does not auto-renew. A new agreement must be executed to continue.) Tj T*
+() Tj T*
+(Signed by authorized representatives:) Tj T*
+() Tj T*
+(________________________          ________________________) Tj T*
+(ABC Technologies AB               Bjorn Eriksen Consulting AB) Tj T*
+(Stockholm, 2026-04-01             Stockholm, 2026-04-01) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000002435 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2505
+%%EOF

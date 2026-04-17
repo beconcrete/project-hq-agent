@@ -1,0 +1,17 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: hq-pubsub
+spec:
+  # Uses Azure Storage Queues as the pub/sub broker.
+  # Publishing to topic "contract-completed" writes to a queue of that name.
+  # The WebSocket notification service subscribes to this topic (future issue).
+  type: pubsub.azure.storagequeues
+  version: v1
+  metadata:
+    - name: connectionString
+      secretKeyRef:
+        name: STORAGE_CONNECTION_STRING
+        key: STORAGE_CONNECTION_STRING
+auth:
+  secretStore: envvar-secrets

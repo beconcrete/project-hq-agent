@@ -1,0 +1,20 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: contract-processing-queue
+spec:
+  # Dapr polls the Azure Storage Queue and POSTs each message to
+  # POST /contract-processing-queue on the app (port 8080).
+  type: bindings.azure.storagequeues
+  version: v1
+  metadata:
+    - name: storageAccount
+      value: hqagentstorage
+    - name: queue
+      value: contract-processing
+    - name: storageConnectionString
+      secretKeyRef:
+        name: STORAGE_CONNECTION_STRING
+        key: STORAGE_CONNECTION_STRING
+auth:
+  secretStore: envvar-secrets

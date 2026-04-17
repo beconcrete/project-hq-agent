@@ -1,0 +1,54 @@
+name: Deploy Contract Orchestrator Agent
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "agents/contract-orchestrator-agent/**"
+      - "infra/dapr/**"
+      - ".github/workflows/deploy-agent.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    name: Build, push, deploy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        run: az acr login --name hqagentregistry
+
+      - name: Build and push image
+        # Build context is repo root so the Dockerfile can access infra/dapr
+        run: |
+          docker build \
+            -f agents/contract-orchestrator-agent/Dockerfile \
+            -t hqagentregistry.azurecr.io/contract-orchestrator:latest \
+            -t hqagentregistry.azurecr.io/contract-orchestrator:${{ github.sha }} \
+            .
+          docker push hqagentregistry.azurecr.io/contract-orchestrator:latest
+          docker push hqagentregistry.azurecr.io/contract-orchestrator:${{ github.sha }}
+
+      - name: Deploy to App Service
+        run: |
+          az webapp config container set \
+            --name hq-agent-app-service \
+            --resource-group hq-agent-resource-group \
+            --docker-custom-image-name hqagentregistry.azurecr.io/contract-orchestrator:${{ github.sha }} \
+            --output none
+
+          az webapp restart \
+            --name hq-agent-app-service \
+            --resource-group hq-agent-resource-group \
+            --output none
