@@ -5,7 +5,7 @@
 # ── Write component files with resolved values ────────────────────────────────
 mkdir -p /tmp/dapr-components
 
-cat > /tmp/dapr-components/contract-queue-binding.yaml << EOF
+cat > /tmp/dapr-components/contract-queue-binding.yaml << 'YAML'
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -18,11 +18,9 @@ spec:
       value: hqagentstorage
     - name: queue
       value: contract-processing
-    - name: storageAccessKey
-      value: "$STORAGE_ACCOUNT_KEY"
-EOF
+YAML
 
-cat > /tmp/dapr-components/pubsub.yaml << EOF
+cat > /tmp/dapr-components/pubsub.yaml << 'YAML'
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -33,9 +31,7 @@ spec:
   metadata:
     - name: storageAccount
       value: hqagentstorage
-    - name: storageAccessKey
-      value: "$STORAGE_ACCOUNT_KEY"
-EOF
+YAML
 
 echo "[entrypoint] Dapr components written to /tmp/dapr-components"
 
