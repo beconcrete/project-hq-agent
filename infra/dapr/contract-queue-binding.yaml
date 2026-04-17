@@ -5,6 +5,7 @@ metadata:
 spec:
   # Dapr polls the Azure Storage Queue and POSTs each message to
   # POST /contract-processing-queue on the app (port 8080).
+  # Connection string is injected at container startup by entrypoint.sh.
   type: bindings.azure.storagequeues
   version: v1
   metadata:
@@ -13,8 +14,4 @@ spec:
     - name: queue
       value: contract-processing
     - name: storageConnectionString
-      secretKeyRef:
-        name: STORAGE_CONNECTION_STRING
-        key: STORAGE_CONNECTION_STRING
-auth:
-  secretStore: envvar-secrets
+      value: "PLACEHOLDER_REPLACED_AT_RUNTIME"

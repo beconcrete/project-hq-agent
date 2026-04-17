@@ -1,27 +1,67 @@
 #!/bin/bash
-# Start the .NET app and the Dapr sidecar in the same container.
-# Both processes run concurrently; if either dies the container exits.
-set -e
+# Generate Dapr component files with actual env-var values, then start the app and sidecar.
+# No set -e here — if daprd crashes we want to log it, not kill the whole container.
 
-# Start the .NET app first so Dapr can reach it immediately
+# ── Write component files with resolved values ────────────────────────────────
+mkdir -p /tmp/dapr-components
+
+cat > /tmp/dapr-components/contract-queue-binding.yaml << EOF
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: contract-processing-queue
+spec:
+  type: bindings.azure.storagequeues
+  version: v1
+  metadata:
+    - name: storageAccount
+      value: hqagentstorage
+    - name: queue
+      value: contract-processing
+    - name: storageConnectionString
+      value: "$STORAGE_CONNECTION_STRING"
+EOF
+
+cat > /tmp/dapr-components/pubsub.yaml << EOF
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: hq-pubsub
+spec:
+  type: pubsub.azure.storagequeues
+  version: v1
+  metadata:
+    - name: connectionString
+      value: "$STORAGE_CONNECTION_STRING"
+EOF
+
+echo "[entrypoint] Dapr components written to /tmp/dapr-components"
+
+# ── Start the .NET app ────────────────────────────────────────────────────────
 dotnet ContractOrchestratorAgent.dll &
 APP_PID=$!
+echo "[entrypoint] .NET app started (PID $APP_PID)"
 
-# Give the app a moment to bind to port 8080
+# Give the app time to bind to port 8080 before Dapr starts forwarding traffic
 sleep 3
 
-# Start the Dapr sidecar — it will poll the queue and POST to the app
+# ── Start the Dapr sidecar ────────────────────────────────────────────────────
 daprd \
   --app-id        contract-orchestrator \
   --app-port      8080 \
   --dapr-http-port 3500 \
-  --components-path /dapr/components \
+  --components-path /tmp/dapr-components \
   --log-level     info \
   &
 DAPRD_PID=$!
+echo "[entrypoint] daprd started (PID $DAPRD_PID)"
 
-# Forward SIGTERM/SIGINT to both processes
-trap "kill $APP_PID $DAPRD_PID 2>/dev/null; exit 0" TERM INT
+# ── Keep the container alive ──────────────────────────────────────────────────
+trap "echo '[entrypoint] Shutting down'; kill $APP_PID $DAPRD_PID 2>/dev/null; exit 0" TERM INT
 
-# Wait — if either process exits unexpectedly, exit the container
-wait $APP_PID $DAPRD_PID
+# Wait for the .NET app — it is the primary process.
+# If it exits, we shut down the sidecar too.
+wait $APP_PID
+echo "[entrypoint] .NET app exited. Stopping daprd."
+kill $DAPRD_PID 2>/dev/null
+wait $DAPRD_PID 2>/dev/null
