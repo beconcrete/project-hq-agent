@@ -18,8 +18,8 @@ spec:
       value: hqagentstorage
     - name: queue
       value: contract-processing
-    - name: storageConnectionString
-      value: "$STORAGE_CONNECTION_STRING"
+    - name: storageAccessKey
+      value: "$STORAGE_ACCOUNT_KEY"
 EOF
 
 cat > /tmp/dapr-components/pubsub.yaml << EOF
@@ -31,8 +31,10 @@ spec:
   type: pubsub.azure.storagequeues
   version: v1
   metadata:
-    - name: connectionString
-      value: "$STORAGE_CONNECTION_STRING"
+    - name: storageAccount
+      value: hqagentstorage
+    - name: storageAccessKey
+      value: "$STORAGE_ACCOUNT_KEY"
 EOF
 
 echo "[entrypoint] Dapr components written to /tmp/dapr-components"
