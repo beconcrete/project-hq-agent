@@ -252,7 +252,11 @@
   }
 
   /* ---- Module switching ------------------------------------- */
-  var MODULE_LABELS = { contracts: "Contracts", "auth-test": "Auth Test" };
+  var MODULE_LABELS = {
+    home: "Home",
+    contracts: "Contracts",
+    "auth-test": "Auth Test",
+  };
 
   function switchModule(name) {
     document.querySelectorAll(".module[data-module]").forEach(function (el) {
@@ -326,6 +330,14 @@
   var sidebarToggle = document.getElementById("sidebarToggle");
   var topbarMenuBtn = document.getElementById("topbarMenuBtn");
   var sidebarOverlay = document.getElementById("sidebarOverlay");
+  var homeBtn = document.getElementById("homeBtn");
+
+  if (homeBtn) {
+    homeBtn.addEventListener("click", function () {
+      switchModule("home");
+      if (isMobile()) closeMobileSidebar();
+    });
+  }
 
   var SIDEBAR_KEY = "hq-sidebar-state";
 
