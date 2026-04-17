@@ -32,7 +32,7 @@ jobs:
         run: dotnet publish functions/HqAgentFunctions/HqAgentFunctions.csproj --configuration Release --output functions/publish
 
       - name: Deploy to Azure Function App
-        uses: Azure/functions-action@v1
+        uses: azure/webapps-deploy@v3
         with:
           app-name: hq-agent-function-app
           package: functions/publish
