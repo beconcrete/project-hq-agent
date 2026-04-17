@@ -31,9 +31,13 @@ jobs:
       - name: Publish
         run: dotnet publish functions/HqAgentFunctions/HqAgentFunctions.csproj --configuration Release --output functions/publish
 
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Deploy to Azure Function App
         uses: azure/webapps-deploy@v3
         with:
           app-name: hq-agent-function-app
           package: functions/publish
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
