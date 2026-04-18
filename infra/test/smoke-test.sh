@@ -42,7 +42,8 @@ hdr "Contract Smoke Test"
 echo ""
 echo "  Select a sample contract to upload:"
 
-mapfile -t DOC_FILES < <(find "$SCRIPT_DIR" -maxdepth 1 \( -name "*.pdf" -o -name "*.docx" \) | sort)
+DOC_FILES=()
+while IFS= read -r f; do DOC_FILES+=("$f"); done < <(find "$SCRIPT_DIR" -maxdepth 1 \( -name "*.pdf" -o -name "*.docx" \) | sort)
 
 if [[ ${#DOC_FILES[@]} -eq 0 ]]; then
   echo -e "${RED}No PDF or DOCX files found in $SCRIPT_DIR${RESET}" >&2
@@ -111,12 +112,12 @@ for i in $(seq 1 10); do
     --output json 2>/dev/null || echo "[]")
 
   # Messages from the .NET isolated worker are base64-encoded JSON.
-  # Try base64-decode first, fall back to raw content.
-  QUEUE_MSG=$(python3 - "$CORRELATION_ID" <<'PYEOF'
+  # RAW is passed as argv[2] — stdin is already used by the heredoc for the script.
+  QUEUE_MSG=$(python3 - "$CORRELATION_ID" "$RAW" <<'PYEOF'
 import sys, json, base64
 
 target = sys.argv[1]
-data   = json.load(sys.stdin)
+data   = json.loads(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else []
 
 for msg in data:
     content = msg.get("content", "")
@@ -129,7 +130,7 @@ for msg in data:
         except Exception:
             pass
 PYEOF
-  <<< "$RAW" || true)
+)
 
   if [[ -n "$QUEUE_MSG" ]]; then
     ok "Queue message found (attempt $i):"
