@@ -5,6 +5,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Anthropic;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +16,8 @@ public class ContractWorkflow
 {
     private readonly BlobServiceClient _blobs;
     private readonly AIAgent _workflowAgent;
+    private readonly IHttpClientFactory _httpFactory;
+    private readonly string _anthropicApiKey;
     private readonly ILogger<ContractWorkflow> _logger;
 
     private const string TriageInstructions = """
@@ -61,9 +64,17 @@ public class ContractWorkflow
         Return only valid JSON — no markdown, no code fences, no explanation.
         """;
 
-    public ContractWorkflow(IAnthropicClient anthropic, BlobServiceClient blobs, ILoggerFactory loggerFactory)
+    public ContractWorkflow(
+        IAnthropicClient anthropic,
+        BlobServiceClient blobs,
+        IHttpClientFactory httpFactory,
+        IConfiguration config,
+        ILoggerFactory loggerFactory)
     {
         _blobs = blobs;
+        _httpFactory = httpFactory;
+        _anthropicApiKey = config["ANTHROPIC_API_KEY"]
+            ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured");
         _logger = loggerFactory.CreateLogger<ContractWorkflow>();
 
         var triageAgent = anthropic.AsAIAgent(
@@ -134,21 +145,53 @@ public class ContractWorkflow
 
         _logger.LogInformation("Downloaded {BlobName}: {Size} bytes", msg.BlobName, bytes.Length);
 
-        IList<AIContent> parts;
+        string text;
         if (IsPdf(contentType, msg.BlobName))
-        {
-            parts =
-            [
-                new DataContent(bytes, "application/pdf"),
-                new TextContent("Analyze this contract document.")
-            ];
-        }
+            text = await ExtractPdfTextAsync(bytes, ct);
         else
-        {
-            parts = [new TextContent(Encoding.UTF8.GetString(bytes))];
-        }
+            text = Encoding.UTF8.GetString(bytes);
 
-        return new ChatMessage(ChatRole.User, parts);
+        return new ChatMessage(ChatRole.User, [new TextContent(text)]);
+    }
+
+    private async Task<string> ExtractPdfTextAsync(byte[] pdfBytes, CancellationToken ct)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            model = "claude-haiku-4-5-20251001",
+            max_tokens = 8192,
+            messages = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "document", source = new { type = "base64", media_type = "application/pdf", data = Convert.ToBase64String(pdfBytes) } },
+                        new { type = "text", text = "Extract all text content from this document. Output the full text verbatim, preserving structure. No commentary." }
+                    }
+                }
+            }
+        });
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
+        req.Headers.Add("x-api-key", _anthropicApiKey);
+        req.Headers.Add("anthropic-version", "2023-06-01");
+        req.Headers.Add("anthropic-beta", "pdfs-2024-09-25");
+        req.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+        var http = _httpFactory.CreateClient();
+        using var resp = await http.SendAsync(req, ct);
+        resp.EnsureSuccessStatusCode();
+
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        var text = JsonDocument.Parse(json).RootElement
+            .GetProperty("content")[0]
+            .GetProperty("text")
+            .GetString() ?? "";
+
+        _logger.LogInformation("PDF text extracted: {CharCount} chars", text.Length);
+        return text;
     }
 
     private static bool IsPdf(string contentType, string blobName) =>

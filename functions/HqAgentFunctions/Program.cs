@@ -13,6 +13,7 @@ var host = new HostBuilder()
     {
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
+        services.AddHttpClient();
 
         var config = context.Configuration;
 
