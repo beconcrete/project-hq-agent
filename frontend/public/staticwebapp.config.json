@@ -12,7 +12,6 @@
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": [
-      "/public/*",
       "/assets/*",
       "*.{css,scss,js,png,gif,ico,jpg,svg,woff,woff2,ttf,eot,html}"
     ]
@@ -26,7 +25,7 @@
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.auth0.com; worker-src blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' wss: https://*.auth0.com https://id.beconcrete.se"
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' wss: https://*.auth0.com https://id.beconcrete.se"
   },
   "mimeTypes": {
     ".json": "application/json"

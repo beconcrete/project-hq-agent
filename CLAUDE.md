@@ -7,16 +7,18 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 ## Repository Structure
 
 ```
-/frontend                    # Azure Static Web App (HTML/CSS/JS)
-  /public                    # Static assets
-  /src                       # App source (components, pages, styles)
+/frontend                    # Azure Static Web App — Vue 3 + Vite
+  /public                    # Static assets copied as-is to dist/ (staticwebapp.config.json, sample.html, images)
+  /src                       # Vue app source
+    /composables             # useAuth.js, useSidebar.js
+    /components              # AppNav.vue, AppHeader.vue
+    /pages                   # HomePage.vue, ContractsPage.vue, AuthTestPage.vue
+    /router                  # Vue Router (index.js)
+    /styles                  # app.css
 /api                         # SWA-managed HTTP functions — served at /api/* (C#, isolated worker)
   /Middleware                # RequireAccessMiddleware (auth on every HTTP request)
 /functions                   # Separate Azure Function App — background/event-driven only (C#, isolated worker)
-  /HqAgentFunctions          # Blob triggers, queue triggers — NOT browser-facing
-/agents
-  /contract-orchestrator-agent   # C# .NET agent: ingestion + extraction
-  /contract-chat-agent           # C# .NET agent: contract Q&A
+  /HqAgentFunctions          # Blob triggers, queue triggers, timer triggers — NOT browser-facing
 /infra                       # Infrastructure scripts and config
 /docs                        # Architecture docs
 /.github/workflows           # CI/CD pipelines
@@ -28,14 +30,14 @@ See [azure-resources.md](./azure-resources.md) for all Azure resource names, the
 
 ## Architecture Decisions
 
-- **Frontend**: Azure Static Web App (CDN-distributed, free tier)
+- **Frontend**: Azure Static Web App (CDN-distributed, free tier) — Vue 3 + Vite, built to `dist/`
 - **API (`/api/`)**: SWA-managed HTTP functions, C# isolated worker. Deployed by the SWA workflow (`api_location: api`). Served at `/api/*`. HTTP triggers only — no blob/queue triggers here.
-- **Functions (`/functions/`)**: Separate Azure Function App (`hq-agent-function-app`). Background and event-driven work only — blob triggers, queue triggers. Never called directly by the browser.
-- **Agents**: Containerized .NET services on Azure App Service with Dapr sidecar
-- **Storage**: Azure Blob (contract files), Queue (work queue), Table (extracted data)
+- **Functions (`/functions/`)**: Separate Azure Function App (`hq-agent-function-app`, Consumption plan). Background and event-driven work only — blob triggers, queue triggers, timer triggers. Never called directly by the browser.
+- **No containers, no App Service, no Container Registry, no Dapr** — all agent logic runs as Azure Functions.
+- **Storage**: Azure Blob (contract files), Queue (work queue), Table (extracted data + alerts)
 - **Real-time**: WebSockets (NOT SignalR, NOT polling)
 - **Queue**: Azure Queue Storage (NOT Service Bus)
-- **NO**: Kubernetes, Logic Apps, Service Bus, SignalR
+- **NO**: Containers, App Service, Container Registry, Dapr, Kubernetes, Logic Apps, Service Bus, SignalR
 
 ### What goes where: api/ vs functions/
 
