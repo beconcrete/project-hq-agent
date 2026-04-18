@@ -129,7 +129,7 @@ It reads `X-Auth-Token`, calls Be Concrete ID, and blocks with 403 if the user i
 
 ### Auth0 config
 
-`AUTH0_DOMAIN` and `AUTH0_CLIENT_ID` are **GitHub secrets only**. The deploy workflow injects them into `frontend/src/auth.js` at build time via `envsubst` — the values are baked into the static JS before the files are uploaded to SWA. They are not needed as Azure SWA application settings and must not be added there.
+`AUTH0_DOMAIN` and `AUTH0_CLIENT_ID` are **GitHub secrets only**. The deploy workflow passes them as `VITE_AUTH0_DOMAIN` and `VITE_AUTH0_CLIENT_ID` environment variables during `npm run build` — Vite bakes them into the bundle at build time. They are not needed as Azure SWA application settings and must not be added there.
 
 ### CSP
 
