@@ -20,9 +20,9 @@ public class ContractBlobTrigger
     }
 
     [Function(nameof(ContractBlobTrigger))]
-    [QueueOutput("contract-processing", Connection = "AzureWebJobsStorage")]
+    [QueueOutput("contract-processing", Connection = "STORAGE_CONNECTION_STRING")]
     public string Run(
-        [BlobTrigger("contracts/{correlationId}/{name}", Connection = "AzureWebJobsStorage")] byte[] contractBlob,
+        [BlobTrigger("contracts/{correlationId}/{name}", Connection = "STORAGE_CONNECTION_STRING")] byte[] contractBlob,
         string correlationId,
         string name)
     {

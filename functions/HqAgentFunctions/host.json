@@ -1,6 +1,13 @@
 {
   "version": "2.0",
   "logging": {
+    "logLevel": {
+      "default": "Warning",
+      "HqAgent": "Information",
+      "Function": "Information",
+      "Host.Results": "Information",
+      "Host.Aggregator": "Trace"
+    },
     "applicationInsights": {
       "samplingSettings": {
         "isEnabled": true,
