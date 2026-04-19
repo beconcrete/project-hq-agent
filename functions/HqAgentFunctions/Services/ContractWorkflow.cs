@@ -23,8 +23,7 @@ public class ContractWorkflow
     private const string TriageInstructions = """
         You are a contract classification specialist.
         Classify the document type from: NDA, MSA, LOI, ASSIGNMENT, SERVICE_AGREEMENT, EMPLOYMENT, LEASE, OTHER.
-        Respond with a single JSON object only: {"documentType": "NDA"}
-        After classifying, always transfer to the extraction agent.
+        Transfer to the extraction agent immediately. Do not output any text.
         """;
 
     private const string ExtractionInstructions = """
@@ -40,7 +39,8 @@ public class ContractWorkflow
           "keyObligations": ["string"],
           "autoRenewal": true or false,
           "riskFlags": ["string"],
-          "confidence": number from 0.0 to 1.0
+          "confidence": number from 0.0 to 1.0,
+          "modelUsed": "claude-sonnet-4-6"
         }
         Return only valid JSON — no markdown, no code fences, no explanation.
         If your confidence is below 0.7, transfer to the escalation agent for a more thorough analysis.
@@ -59,7 +59,8 @@ public class ContractWorkflow
           "keyObligations": ["string"],
           "autoRenewal": true or false,
           "riskFlags": ["string"],
-          "confidence": number from 0.0 to 1.0
+          "confidence": number from 0.0 to 1.0,
+          "modelUsed": "claude-opus-4-6"
         }
         Return only valid JSON — no markdown, no code fences, no explanation.
         """;
@@ -131,7 +132,7 @@ public class ContractWorkflow
         _logger.LogInformation("Workflow complete for {CorrelationId}", msg.CorrelationId);
 
         var extraction = ParseExtraction(raw);
-        var modelUsed = extraction.Confidence < 0.7 ? "claude-opus-4-6" : "claude-sonnet-4-6";
+        var modelUsed = extraction.ModelUsed ?? "claude-sonnet-4-6";
         return (extraction, modelUsed);
     }
 

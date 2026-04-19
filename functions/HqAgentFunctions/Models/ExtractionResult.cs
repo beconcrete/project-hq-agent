@@ -12,5 +12,6 @@ public record ExtractionResult(
     [property: JsonPropertyName("keyObligations")] string[] KeyObligations,
     [property: JsonPropertyName("autoRenewal")] bool AutoRenewal,
     [property: JsonPropertyName("riskFlags")] string[] RiskFlags,
-    [property: JsonPropertyName("confidence")] double Confidence
+    [property: JsonPropertyName("confidence")] double Confidence,
+    [property: JsonPropertyName("modelUsed")] string? ModelUsed
 );
