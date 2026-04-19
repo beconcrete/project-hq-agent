@@ -1,25 +1,35 @@
-using Anthropic;
+using System.Text;
+using System.Text.Json;
+using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Anthropic;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Text;
-using System.Text.Json;
+using OpenAI;
 
 namespace HqAgent.Functions.Services;
 
-public class ContractWorkflow
+/// <summary>
+/// Contract analysis pipeline using OpenAI + MAF handoff workflow.
+/// OpenAI supports assistant message prefill, so the MAF triage → extraction
+/// handoff works correctly (unlike Anthropic which rejects it).
+/// </summary>
+public class OpenAIContractWorkflow : IContractAnalysisWorkflow
 {
     private readonly BlobStorageService _blobs;
-    private readonly IAnthropicClient _anthropic;
     private readonly IHttpClientFactory _httpFactory;
-    private readonly string _anthropicApiKey;
+    private readonly string _apiKey;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ILogger<ContractWorkflow> _logger;
+    private readonly ILogger<OpenAIContractWorkflow> _logger;
+
+    private readonly IChatClient _triageChatClient;
+    private readonly IChatClient _extractionChatClient;
+
+    private const string TriageModel     = "gpt-4.1-mini";
+    private const string ExtractionModel = "gpt-4.1";
 
     private const string TriageInstructions = """
         You are a contract classification specialist.
@@ -33,7 +43,7 @@ public class ContractWorkflow
           "triageConfidence": <confidence>,
           "extractedFields": null,
           "extractionConfidence": 0.0,
-          "modelUsed": "claude-haiku-4-5-20251001",
+          "modelUsed": "gpt-4.1-mini",
           "pendingReview": true
         }
 
@@ -55,50 +65,50 @@ public class ContractWorkflow
           "triageConfidence": <triage confidence from chat history>,
           "extractedFields": { <your extracted key-value fields> },
           "extractionConfidence": <your confidence 0.0-1.0>,
-          "modelUsed": "claude-sonnet-4-6",
+          "modelUsed": "gpt-4.1",
           "pendingReview": false
         }
         """;
 
-    public ContractWorkflow(
-        IAnthropicClient anthropic,
+    public OpenAIContractWorkflow(
         BlobStorageService blobs,
         IHttpClientFactory httpFactory,
         IConfiguration config,
         ILoggerFactory loggerFactory)
     {
-        _anthropic = anthropic;
-        _blobs = blobs;
+        _blobs       = blobs;
         _httpFactory = httpFactory;
         _loggerFactory = loggerFactory;
-        _anthropicApiKey = config["ANTHROPIC_API_KEY"]
-            ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured");
-        _logger = loggerFactory.CreateLogger<ContractWorkflow>();
+        _logger      = loggerFactory.CreateLogger<OpenAIContractWorkflow>();
+
+        _apiKey = config["OPENAI_API_KEY"]
+            ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
+
+        var openAiClient = new OpenAIClient(_apiKey);
+        _triageChatClient     = openAiClient.GetChatClient(TriageModel).AsIChatClient();
+        _extractionChatClient = openAiClient.GetChatClient(ExtractionModel).AsIChatClient();
     }
 
-    public async Task<ExtractionResult> RunAsync(
-        ContractMessage msg,
-        CancellationToken ct = default)
+    public async Task<ExtractionResult> RunAsync(ContractMessage msg, CancellationToken ct = default)
     {
         _logger.LogInformation("Processing contract {CorrelationId} — {BlobName}", msg.CorrelationId, msg.BlobName);
 
         var userMessage = await BuildMessageAsync(msg, ct);
 
-        // Build agents and workflow fresh per run — gives each job isolated in-memory history
-        // so the extraction agent sees triage output without cross-job contamination.
-        var triageAgent = _anthropic.AsAIAgent(
-            model: "claude-haiku-4-5-20251001",
-            instructions: TriageInstructions,
-            name: "triage",
-            description: "Classifies the contract document type; flags for human review if confidence is below 0.7",
-            loggerFactory: _loggerFactory);
+        // Build agents and workflow fresh per run so each job has isolated in-memory history.
+        var triageAgent = new ChatClientAgent(_triageChatClient, new ChatClientAgentOptions
+        {
+            Name        = "triage",
+            Description = "Classifies the contract document type; flags for human review if confidence is below 0.7",
+            ChatOptions = new ChatOptions { Instructions = TriageInstructions },
+        });
 
-        var extractionAgent = _anthropic.AsAIAgent(
-            model: "claude-sonnet-4-6",
-            instructions: ExtractionInstructions,
-            name: "extraction",
-            description: "Extracts open-ended contract fields for any document type",
-            loggerFactory: _loggerFactory);
+        var extractionAgent = new ChatClientAgent(_extractionChatClient, new ChatClientAgentOptions
+        {
+            Name        = "extraction",
+            Description = "Extracts open-ended contract fields for any document type",
+            ChatOptions = new ChatOptions { Instructions = ExtractionInstructions },
+        });
 
 #pragma warning disable MAAIW001
         var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(triageAgent)
@@ -145,26 +155,32 @@ public class ContractWorkflow
     {
         var body = JsonSerializer.Serialize(new
         {
-            model = "claude-haiku-4-5-20251001",
+            model      = TriageModel,
             max_tokens = 8192,
             messages = new[]
             {
                 new
                 {
-                    role = "user",
+                    role    = "user",
                     content = new object[]
                     {
-                        new { type = "document", source = new { type = "base64", media_type = "application/pdf", data = Convert.ToBase64String(pdfBytes) } },
-                        new { type = "text", text = "Extract all text content from this document. Output the full text verbatim, preserving structure. No commentary." }
+                        new
+                        {
+                            type = "file",
+                            file = new
+                            {
+                                filename  = "document.pdf",
+                                file_data = $"data:application/pdf;base64,{Convert.ToBase64String(pdfBytes)}",
+                            }
+                        },
+                        new { type = "text", text = "Extract all text content from this document verbatim, preserving structure. No commentary." }
                     }
                 }
             }
         });
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages");
-        req.Headers.Add("x-api-key", _anthropicApiKey);
-        req.Headers.Add("anthropic-version", "2023-06-01");
-        req.Headers.Add("anthropic-beta", "pdfs-2024-09-25");
+        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+        req.Headers.Add("Authorization", $"Bearer {_apiKey}");
         req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
         var http = _httpFactory.CreateClient();
@@ -173,8 +189,9 @@ public class ContractWorkflow
 
         var json = await resp.Content.ReadAsStringAsync(ct);
         var text = JsonDocument.Parse(json).RootElement
-            .GetProperty("content")[0]
-            .GetProperty("text")
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
             .GetString() ?? "";
 
         _logger.LogInformation("PDF text extracted: {CharCount} chars", text.Length);
@@ -193,9 +210,6 @@ public class ContractWorkflow
             ?? throw new InvalidOperationException("Null deserialization result");
     }
 
-    // Finds the last complete top-level JSON object in the text.
-    // Triage may emit JSON before handing off to extraction; we always want the
-    // extraction agent's output, which appears last in the combined response stream.
     private static string ExtractLastJson(string text)
     {
         string? last = null;
@@ -205,7 +219,6 @@ public class ContractWorkflow
         {
             var start = text.IndexOf('{', searchFrom);
             if (start == -1) break;
-
             var json = TryExtractJsonAt(text, start);
             if (json != null) last = json;
             searchFrom = start + 1;
