@@ -63,6 +63,19 @@ A change to `shared/**` triggers **all** deployment workflows:
 
 See [azure-resources.md](./azure-resources.md) for all Azure resource names, the resource group, subscription, and portal dashboard link for this project.
 
+## Architectural Decision Rules
+
+**Never make architectural decisions unilaterally.** Always ask before:
+- Creating new Azure resources (Function Apps, Storage accounts, plans, etc.)
+- Changing project SDK types (e.g. Web → Functions Worker)
+- Deciding where code is hosted (which Function App, which service)
+- Adding new deployment pipelines or workflows
+- Changing how services communicate
+
+If a task requires an architectural decision to proceed, stop and ask. Do not pick an approach and implement it.
+
+---
+
 ## Architecture Decisions
 
 - **Frontend**: Azure Static Web App (CDN-distributed, free tier) — Vue 3 + Vite, built to `dist/`
