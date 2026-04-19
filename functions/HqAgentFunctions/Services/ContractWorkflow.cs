@@ -210,9 +210,25 @@ public class ContractWorkflow
     private static string ExtractJson(string text)
     {
         var start = text.IndexOf('{');
-        var end = text.LastIndexOf('}');
-        if (start == -1 || end == -1 || end < start)
+        if (start == -1)
             throw new InvalidOperationException($"No JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
-        return text[start..(end + 1)];
+
+        int depth = 0;
+        bool inString = false;
+        bool escaped = false;
+
+        for (int i = start; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (escaped) { escaped = false; continue; }
+            if (c == '\\' && inString) { escaped = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0)
+                return text[start..(i + 1)];
+        }
+
+        throw new InvalidOperationException($"No complete JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
     }
 }
