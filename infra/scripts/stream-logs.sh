@@ -1,26 +1,22 @@
 #!/usr/bin/env bash
-# Stream live logs from hq-agent-function-app to your terminal.
+# Poll Application Insights for recent traces from hq-agent-function-app.
 #
-# WHERE LOGS END UP
-# -----------------
-# _logger.LogInformation(...) writes to two places:
-#   1. Application Insights (Azure portal) — search in Logs → traces table
-#      Portal: https://portal.azure.com → hq-agent-resource-group → hq-agent-function-app → Application Insights
-#      Useful queries:
-#        traces | order by timestamp desc | take 100
-#        traces | where message contains "<correlationId>"
-#        traces | where severityLevel >= 2  // Warning+
-#   2. Live console stream (this script)
+# WHY NOT az webapp log tail?
+# The Function App runs on the .NET isolated worker model. Application logs
+# (_logger.LogInformation etc.) go directly to Application Insights — they
+# never reach the Kudu HTTP log stream. az webapp log tail only shows IIS/
+# platform HTTP logs, not application traces.
 #
-# Live Metrics (real-time dashboard with zero-lag):
-#   Portal → Application Insights → Live Metrics
+# REAL-TIME OPTION (zero-lag, portal only):
+#   Portal → hq-agent-resource-group → hq-agent-function-app →
+#   Application Insights → Live Metrics
 #
 # FOLLOWING A DOCUMENT END-TO-END
 # --------------------------------
-# Search Application Insights Logs with a correlationId:
-#   traces | where message contains "YOUR_CORRELATION_ID" | order by timestamp asc
+# Run with a correlationId to filter:
+#   bash stream-logs.sh <correlationId>
 #
-# Expected log sequence for a healthy upload:
+# Expected sequence for a healthy upload:
 #   [ContractBlobTrigger]  "New contract uploaded: {correlationId}/{name} ({size} bytes)"
 #   [ContractBlobTrigger]  "Enqueued processing message for correlationId: {correlationId}"
 #   [ContractIngestion]    "ContractIngestion triggered for {correlationId}"
@@ -31,13 +27,40 @@
 
 set -euo pipefail
 
-FUNCTION_APP="hq-agent-function-app"
+APP_INSIGHTS="hq-agent-function-app"
 RESOURCE_GROUP="hq-agent-resource-group"
+POLL_SECONDS=10
+CORRELATION_ID="${1:-}"
 
-echo "Streaming logs from $FUNCTION_APP..."
-echo "Press Ctrl+C to stop."
+if [ -n "$CORRELATION_ID" ]; then
+  FILTER="| where message contains \"$CORRELATION_ID\""
+  echo "Filtering for correlationId: $CORRELATION_ID"
+else
+  FILTER=""
+  echo "Showing all traces. Pass a correlationId as argument to filter: bash stream-logs.sh <id>"
+fi
+
+echo "Polling Application Insights every ${POLL_SECONDS}s. Press Ctrl+C to stop."
 echo ""
 
-az webapp log tail \
-  --name "$FUNCTION_APP" \
-  --resource-group "$RESOURCE_GROUP"
+LAST_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+while true; do
+  RESULTS=$(az monitor app-insights query \
+    --app "$APP_INSIGHTS" \
+    --resource-group "$RESOURCE_GROUP" \
+    --analytics-query "traces
+      | where timestamp > datetime('$LAST_TIMESTAMP')
+      $FILTER
+      | project timestamp, message, severityLevel, cloud_RoleName
+      | order by timestamp asc" \
+    --output json 2>/dev/null \
+    | jq -r '.tables[0].rows[] | "\(.[0]) [\(.[3])] \(.[1])"' 2>/dev/null || true)
+
+  if [ -n "$RESULTS" ]; then
+    echo "$RESULTS"
+    LAST_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  fi
+
+  sleep "$POLL_SECONDS"
+done
