@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using ContractOrchestratorAgent.Models;
 using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ContractOrchestratorAgent.Services;
 

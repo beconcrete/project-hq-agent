@@ -2,6 +2,7 @@ using System.Text.Json;
 using Azure.Storage.Queues;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace ContractOrchestratorAgent.Services;
 
