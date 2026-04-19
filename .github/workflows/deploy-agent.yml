@@ -24,7 +24,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "8.0.x"
 
       - name: Publish
         run: dotnet publish agents/contract-orchestrator-agent/ContractOrchestratorAgent.csproj --configuration Release --output agents/publish
@@ -33,6 +33,19 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Provision Function App if not exists
+        run: |
+          az functionapp create \
+            --name hq-agent-orchestrator-app \
+            --resource-group hq-agent-resource-group \
+            --storage-account hqagentstorage \
+            --plan NorthEuropePlan \
+            --runtime dotnet-isolated \
+            --runtime-version 8 \
+            --functions-version 4 \
+            --output none \
+          || true
 
       - name: Deploy to Azure Function App
         uses: azure/webapps-deploy@v3
