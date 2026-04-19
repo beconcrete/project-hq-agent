@@ -37,5 +37,5 @@ jobs:
       - name: Deploy to Azure Function App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: hq-agent-orchestrator-app
+          app-name: hq-agent-function-app
           package: agents/publish
