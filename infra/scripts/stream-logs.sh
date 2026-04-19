@@ -46,7 +46,7 @@ echo ""
 LAST_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 while true; do
-  RESULTS=$(az monitor app-insights query \
+  TRACES=$(az monitor app-insights query \
     --app "$APP_INSIGHTS" \
     --resource-group "$RESOURCE_GROUP" \
     --analytics-query "traces
@@ -57,8 +57,20 @@ while true; do
     --output json 2>/dev/null \
     | jq -r '.tables[0].rows[] | "\(.[0]) [\(.[3])] \(.[1])"' 2>/dev/null || true)
 
-  if [ -n "$RESULTS" ]; then
-    echo "$RESULTS"
+  EXCEPTIONS=$(az monitor app-insights query \
+    --app "$APP_INSIGHTS" \
+    --resource-group "$RESOURCE_GROUP" \
+    --analytics-query "exceptions
+      | where timestamp > datetime('$LAST_TIMESTAMP')
+      $FILTER
+      | project timestamp, type, outerMessage, innermostMessage, cloud_RoleName
+      | order by timestamp asc" \
+    --output json 2>/dev/null \
+    | jq -r '.tables[0].rows[] | "\(.[0]) [EXCEPTION \(.[4])] \(.[1]): \(.[2]) | innermost: \(.[3])"' 2>/dev/null || true)
+
+  if [ -n "$TRACES" ] || [ -n "$EXCEPTIONS" ]; then
+    [ -n "$TRACES" ] && echo "$TRACES"
+    [ -n "$EXCEPTIONS" ] && echo "$EXCEPTIONS"
     LAST_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   fi
 

@@ -29,7 +29,16 @@ public class ContractIngestion
     {
         _logger.LogInformation("ContractIngestion triggered for {CorrelationId}", msg.CorrelationId);
 
-        var extraction = await _workflow.RunAsync(msg, context.CancellationToken);
+        ExtractionResult extraction;
+        try
+        {
+            extraction = await _workflow.RunAsync(msg, context.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ContractIngestion failed for {CorrelationId}: {Message}", msg.CorrelationId, ex.Message);
+            throw;
+        }
 
         await _table.WriteExtractionAsync(msg.CorrelationId, msg.BlobName, extraction, context.CancellationToken);
 
