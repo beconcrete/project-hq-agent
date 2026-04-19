@@ -1,6 +1,9 @@
 using System.Net;
+using System.Text.Json;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Queues;
+using HqAgent.Shared.Models;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -135,6 +138,20 @@ public class UploadContract
                     { "originalFileName", fileName }
                 }
             });
+
+        var queueClient = new QueueServiceClient(_storageConnectionString)
+            .GetQueueClient("contract-processing");
+        await queueClient.CreateIfNotExistsAsync();
+
+        var message = new ContractMessage(
+            BlobName: blobName,
+            CorrelationId: correlationId,
+            UploadedAt: DateTime.UtcNow,
+            ContainerName: "contracts");
+
+        var messageJson = JsonSerializer.Serialize(message);
+        await queueClient.SendMessageAsync(
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(messageJson)));
 
         var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new { correlationId, blobName, fileName, status = "processing" });

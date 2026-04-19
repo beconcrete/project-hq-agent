@@ -1,6 +1,7 @@
-using Azure.Storage.Blobs;
-using Azure.Storage.Queues;
+using Anthropic;
+using Anthropic.Core;
 using Azure.Data.Tables;
+using Azure.Storage.Blobs;
 using ContractOrchestratorAgent.Services;
 using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Storage;
@@ -14,22 +15,34 @@ var host = new HostBuilder()
     {
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
+        services.AddHttpClient();
 
         var config = context.Configuration;
 
-        var storageConnStr = config["STORAGE_CONNECTION_STRING"]
+        var storageConnection = config["STORAGE_CONNECTION_STRING"]
             ?? throw new InvalidOperationException("STORAGE_CONNECTION_STRING is not configured");
 
-        services.AddSingleton(new BlobServiceClient(storageConnStr));
-        services.AddSingleton(new TableServiceClient(storageConnStr));
-        services.AddSingleton(new QueueServiceClient(storageConnStr));
+        services.AddSingleton(new BlobServiceClient(storageConnection));
+        services.AddSingleton(new TableServiceClient(storageConnection));
+        services.AddSingleton<BlobStorageService>();
+        services.AddSingleton<TableStorageService>();
 
-        services.AddHttpClient<IAIModelClient, AnthropicHttpClient>();
+        var aiProvider = config["AI_PROVIDER"] ?? "openai";
 
-        services.AddScoped<BlobStorageService>();
-        services.AddScoped<ContractAnalysisService>();
-        services.AddScoped<TableStorageService>();
-        services.AddScoped<ContractProcessor>();
+        if (aiProvider == "anthropic")
+        {
+            var anthropicApiKey = config["ANTHROPIC_API_KEY"]
+                ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured for Anthropic provider");
+
+            services.AddSingleton<IAnthropicClient>(
+                new AnthropicClient(new ClientOptions { ApiKey = anthropicApiKey }));
+
+            services.AddSingleton<IContractAnalysisWorkflow, AnthropicContractWorkflow>();
+        }
+        else
+        {
+            services.AddSingleton<IContractAnalysisWorkflow, OpenAIContractWorkflow>();
+        }
     })
     .Build();
 

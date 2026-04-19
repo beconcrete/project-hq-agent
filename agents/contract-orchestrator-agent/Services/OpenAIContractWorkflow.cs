@@ -10,7 +10,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
-namespace HqAgent.Functions.Services;
+namespace ContractOrchestratorAgent.Services;
 
 /// <summary>
 /// Contract analysis pipeline using OpenAI + MAF handoff workflow.
@@ -76,10 +76,10 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
         IConfiguration config,
         ILoggerFactory loggerFactory)
     {
-        _blobs       = blobs;
-        _httpFactory = httpFactory;
+        _blobs         = blobs;
+        _httpFactory   = httpFactory;
         _loggerFactory = loggerFactory;
-        _logger      = loggerFactory.CreateLogger<OpenAIContractWorkflow>();
+        _logger        = loggerFactory.CreateLogger<OpenAIContractWorkflow>();
 
         _apiKey = config["OPENAI_API_KEY"]
             ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
@@ -95,7 +95,6 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
 
         var userMessage = await BuildMessageAsync(msg, ct);
 
-        // Build agents and workflow fresh per run so each job has isolated in-memory history.
         var triageAgent = new ChatClientAgent(_triageChatClient, new ChatClientAgentOptions
         {
             Name        = "triage",

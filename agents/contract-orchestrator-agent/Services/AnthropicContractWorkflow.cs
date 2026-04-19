@@ -7,7 +7,7 @@ using HqAgent.Shared.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace HqAgent.Functions.Services;
+namespace ContractOrchestratorAgent.Services;
 
 /// <summary>
 /// Contract analysis pipeline using direct Anthropic tool-use calls — no MAF handoff.
@@ -104,7 +104,6 @@ public class AnthropicContractWorkflow : IContractAnalysisWorkflow
             ? "application/pdf"
             : "application/octet-stream";
 
-        // Step 1: Triage
         _logger.LogInformation("Triaging with {Model}", TriageModel);
         var triage = await InvokeToolAsync<TriageResult>(
             model: TriageModel, systemPrompt: TriageSystemPrompt,
@@ -120,7 +119,6 @@ public class AnthropicContractWorkflow : IContractAnalysisWorkflow
             return new ExtractionResult(triage.DocumentType, triage.Confidence, null, 0, TriageModel, true);
         }
 
-        // Step 2: Extraction
         _logger.LogInformation("Extracting with {Model}", ExtractionModel);
         var toolOutput = await InvokeToolAsync<ExtractionToolOutput>(
             model: ExtractionModel, systemPrompt: ExtractionSystemPrompt,

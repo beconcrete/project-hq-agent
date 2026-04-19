@@ -1,10 +1,11 @@
+using ContractOrchestratorAgent.Services;
 using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-namespace HqAgent.Functions;
+namespace ContractOrchestratorAgent.Functions;
 
 public class ContractIngestion
 {
