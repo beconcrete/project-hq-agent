@@ -183,6 +183,15 @@ It reads `X-Auth-Token`, calls Be Concrete ID, and blocks with 403 if the user i
 
 The `staticwebapp.config.json` CSP includes `worker-src blob:` to allow Auth0's SDK to spawn its token-cache web worker.
 
+## Microsoft Agents Framework (MAF)
+
+See [docs/MAF.md](./docs/MAF.md) for patterns, gotchas, and working examples covering:
+- Use `AgentWorkflowBuilder.CreateHandoffBuilderWith` — not `HandoffWorkflowBuilder` (deprecated, `MAAIW001`)
+- Execute with `InProcessExecution.OpenStreamingAsync` — do not call `.RunAsync()` on a wrapped agent
+- Shared `ChatHistoryProvider` on all agents in a workflow so they see each other's messages
+- Tools: `[Description]` attribute + `AIFunctionFactory.Create(method)`
+- What to persist vs skip in `StoreChatHistoryAsync` (never persist tool call/result pairs)
+
 ## GitHub Workflows
 
 All workflow files include `concurrency` to prevent race conditions:

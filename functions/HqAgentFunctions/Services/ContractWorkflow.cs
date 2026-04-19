@@ -15,9 +15,10 @@ namespace HqAgent.Functions.Services;
 public class ContractWorkflow
 {
     private readonly BlobStorageService _blobs;
-    private readonly AIAgent _workflowAgent;
+    private readonly IAnthropicClient _anthropic;
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _anthropicApiKey;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<ContractWorkflow> _logger;
 
     private const string TriageInstructions = """
@@ -66,42 +67,13 @@ public class ContractWorkflow
         IConfiguration config,
         ILoggerFactory loggerFactory)
     {
+        _anthropic = anthropic;
         _blobs = blobs;
         _httpFactory = httpFactory;
+        _loggerFactory = loggerFactory;
         _anthropicApiKey = config["ANTHROPIC_API_KEY"]
             ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured");
         _logger = loggerFactory.CreateLogger<ContractWorkflow>();
-
-        var triageAgent = anthropic.AsAIAgent(
-            model: "claude-haiku-4-5-20251001",
-            instructions: TriageInstructions,
-            name: "triage",
-            description: "Classifies the contract document type; flags for review if confidence is low",
-            loggerFactory: loggerFactory
-        );
-
-        var extractionAgent = anthropic.AsAIAgent(
-            model: "claude-sonnet-4-6",
-            instructions: ExtractionInstructions,
-            name: "extraction",
-            description: "Extracts open-ended contract fields for any document type",
-            loggerFactory: loggerFactory
-        );
-
-#pragma warning disable MAAIW001
-        var workflow = new HandoffWorkflowBuilder(triageAgent)
-            .WithHandoff(triageAgent, extractionAgent)
-            .Build();
-#pragma warning restore MAAIW001
-
-        _workflowAgent = workflow.AsAIAgent(
-            id: "contract-workflow",
-            name: "ContractWorkflow",
-            description: "Processes contracts through triage and extraction",
-            executionEnvironment: InProcessExecution.Default,
-            includeExceptionDetails: false,
-            includeWorkflowOutputsInResponse: true
-        );
     }
 
     public async Task<ExtractionResult> RunAsync(
@@ -110,13 +82,50 @@ public class ContractWorkflow
     {
         _logger.LogInformation("Processing contract {CorrelationId} — {BlobName}", msg.CorrelationId, msg.BlobName);
 
-        var message = await BuildMessageAsync(msg, ct);
-        var response = await _workflowAgent.RunAsync(message, cancellationToken: ct);
-        var raw = response.Text ?? throw new InvalidOperationException("Workflow returned empty response");
+        var userMessage = await BuildMessageAsync(msg, ct);
+
+        // Build agents and workflow fresh per run — gives each job isolated in-memory history
+        // so the extraction agent sees triage output without cross-job contamination.
+        var triageAgent = _anthropic.AsAIAgent(
+            model: "claude-haiku-4-5-20251001",
+            instructions: TriageInstructions,
+            name: "triage",
+            description: "Classifies the contract document type; flags for human review if confidence is below 0.7",
+            loggerFactory: _loggerFactory);
+
+        var extractionAgent = _anthropic.AsAIAgent(
+            model: "claude-sonnet-4-6",
+            instructions: ExtractionInstructions,
+            name: "extraction",
+            description: "Extracts open-ended contract fields for any document type",
+            loggerFactory: _loggerFactory);
+
+#pragma warning disable MAAIW001
+        var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(triageAgent)
+            .WithHandoff(triageAgent, extractionAgent)
+            .Build();
+#pragma warning restore MAAIW001
+
+        await using var run = await InProcessExecution.OpenStreamingAsync(
+            workflow, sessionId: msg.CorrelationId);
+
+        await run.TrySendMessageAsync(userMessage);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var sb = new StringBuilder();
+        await foreach (var evt in run.WatchStreamAsync().WithCancellation(ct))
+        {
+            if (evt is AgentResponseUpdateEvent update)
+                sb.Append(update.Update.Text ?? "");
+            else if (evt is WorkflowErrorEvent err)
+                throw err.Exception ?? new InvalidOperationException("Workflow error during contract processing");
+            else if (evt is WorkflowOutputEvent)
+                break;
+        }
 
         _logger.LogInformation("Workflow complete for {CorrelationId}", msg.CorrelationId);
 
-        return ParseExtraction(raw);
+        return ParseExtraction(sb.ToString());
     }
 
     private async Task<ChatMessage> BuildMessageAsync(ContractMessage msg, CancellationToken ct)
@@ -178,18 +187,36 @@ public class ContractWorkflow
 
     private static ExtractionResult ParseExtraction(string raw)
     {
-        var json = ExtractJson(raw);
+        var json = ExtractLastJson(raw);
         return JsonSerializer.Deserialize<ExtractionResult>(json,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("Null deserialization result");
     }
 
-    private static string ExtractJson(string text)
+    // Finds the last complete top-level JSON object in the text.
+    // Triage may emit JSON before handing off to extraction; we always want the
+    // extraction agent's output, which appears last in the combined response stream.
+    private static string ExtractLastJson(string text)
     {
-        var start = text.IndexOf('{');
-        if (start == -1)
-            throw new InvalidOperationException($"No JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
+        string? last = null;
+        var searchFrom = 0;
 
+        while (true)
+        {
+            var start = text.IndexOf('{', searchFrom);
+            if (start == -1) break;
+
+            var json = TryExtractJsonAt(text, start);
+            if (json != null) last = json;
+            searchFrom = start + 1;
+        }
+
+        return last ?? throw new InvalidOperationException(
+            $"No JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
+    }
+
+    private static string? TryExtractJsonAt(string text, int start)
+    {
         int depth = 0;
         bool inString = false;
         bool escaped = false;
@@ -206,6 +233,6 @@ public class ContractWorkflow
                 return text[start..(i + 1)];
         }
 
-        throw new InvalidOperationException($"No complete JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
+        return null;
     }
 }
