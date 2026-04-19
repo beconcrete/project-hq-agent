@@ -3,7 +3,7 @@
 **Subscription:** Be Concrete Main (`e70b3a39-d6a6-43c9-9c42-90bb2ed1a393`)
 **Resource Group:** `hq-agent-resource-group`
 **Primary Location:** northeurope
-**Last updated:** 2026-04-17
+**Last updated:** 2026-04-19
 
 ## Resources
 
@@ -22,12 +22,15 @@
 |---|---|---|
 | Blob Container | `contracts` | Uploaded contract files (PDF, DOCX) |
 | Queue | `contract-processing` | Work queue — ContractIngestion function reads from here |
-| Table | `ContractExtractions` | Extracted contract fields (schema-flexible) |
+| Queue | `contract-completed` | Completion notifications — written after processing, consumed by WebSocket handler (future) |
+| Table | `ContractExtractions` | Extracted contract fields — open schema, `status` is `completed` or `pending_review` |
 | Table | `ContractAlerts` | Contract expiry alerts — written by timer function, read by /api/contract-alerts |
 
 ## Notable Decisions
 
-- **No containers, no App Service, no Container Registry** — deleted 2026-04-17. All agent logic runs as Azure Functions on the Consumption plan.
-- **No Dapr** — deleted 2026-04-17. Native Azure Functions queue/blob bindings replace Dapr components entirely.
+- **No containers, no App Service, no Container Registry, no Dapr** — all deleted 2026-04-17. All agent logic runs as Azure Functions on the Consumption plan using native queue/blob bindings.
+- **`hq-agent-function-app` hosts `functions/HqAgentFunctions`** — blob trigger + queue trigger for contract ingestion pipeline.
+- **`agents/contract-orchestrator-agent` is pending its own Function App** — currently builds and deploys via `deploy-agent.yml` targeting `hq-agent-orchestrator-app` (resource to be provisioned).
+- **Shared library `HqAgent.Shared`** — `net8.0` class library referenced by `api/`, `functions/`, and `agents/`. Contains `BlobStorageService`, `TableStorageService`, `ContractMessage`, `ExtractionResult`, `IAIModelClient`.
 - **SWA uses westeurope** — Azure Static Web Apps are not available in northeurope. Content is CDN-distributed so latency for end users is unaffected.
 - **Function App uses Consumption plan** — scales to zero, ~$0-2/month at low volume.

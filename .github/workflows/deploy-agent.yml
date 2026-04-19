@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - "agents/contract-orchestrator-agent/**"
-      - "infra/dapr/**"
+      - "shared/**"
       - ".github/workflows/deploy-agent.yml"
 
 concurrency:
@@ -16,43 +16,26 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    name: Build, push, deploy
+    name: Build and Deploy
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to ACR
-        uses: docker/login-action@v3
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          registry: hqagentregistry.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        run: dotnet publish agents/contract-orchestrator-agent/ContractOrchestratorAgent.csproj --configuration Release --output agents/publish
 
       - name: Azure login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build and push image
-        # Build context is repo root so the Dockerfile can access infra/dapr
-        run: |
-          docker build \
-            -f agents/contract-orchestrator-agent/Dockerfile \
-            -t hqagentregistry.azurecr.io/contract-orchestrator:latest \
-            -t hqagentregistry.azurecr.io/contract-orchestrator:${{ github.sha }} \
-            .
-          docker push hqagentregistry.azurecr.io/contract-orchestrator:latest
-          docker push hqagentregistry.azurecr.io/contract-orchestrator:${{ github.sha }}
-
-      - name: Deploy to App Service
-        run: |
-          az webapp config container set \
-            --name hq-agent-app-service \
-            --resource-group hq-agent-resource-group \
-            --docker-custom-image-name hqagentregistry.azurecr.io/contract-orchestrator:${{ github.sha }} \
-            --output none
-
-          az webapp restart \
-            --name hq-agent-app-service \
-            --resource-group hq-agent-resource-group \
-            --output none
+      - name: Deploy to Azure Function App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: hq-agent-orchestrator-app
+          package: agents/publish

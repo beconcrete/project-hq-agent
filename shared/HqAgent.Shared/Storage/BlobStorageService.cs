@@ -1,21 +1,19 @@
 using Azure.Storage.Blobs;
+using Microsoft.Extensions.Logging;
 
-namespace ContractOrchestratorAgent.Services;
+namespace HqAgent.Shared.Storage;
 
-public class BlobDownloadService
+public class BlobStorageService
 {
     private readonly BlobServiceClient _client;
-    private readonly ILogger<BlobDownloadService> _logger;
+    private readonly ILogger<BlobStorageService> _logger;
 
-    public BlobDownloadService(BlobServiceClient client, ILogger<BlobDownloadService> logger)
+    public BlobStorageService(BlobServiceClient client, ILogger<BlobStorageService> logger)
     {
         _client = client;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Downloads a blob and returns its raw bytes and content-type.
-    /// </summary>
     public async Task<(byte[] Data, string ContentType)> DownloadAsync(
         string            containerName,
         string            blobName,

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HqAgent.Shared.Abstractions;
 
 namespace ContractOrchestratorAgent.Services;
 
@@ -10,7 +11,7 @@ namespace ContractOrchestratorAgent.Services;
 /// Using HttpClient directly avoids SDK version churn and gives full control
 /// over beta headers required for PDF support and prompt caching.
 /// </summary>
-public class AnthropicHttpClient
+public class AnthropicHttpClient : IAIModelClient
 {
     private readonly HttpClient _http;
     private readonly string     _apiKey;

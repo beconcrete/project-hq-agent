@@ -468,6 +468,12 @@ body {
   color: var(--color-text-muted);
 }
 
+/* --- Loading State ----------------------------------------- */
+.app-loading {
+  min-height: 100vh;
+  background: var(--sidebar-bg);
+}
+
 /* --- Auth Gate (Login Screen) ------------------------------ */
 .auth-gate {
   min-height: 100vh;

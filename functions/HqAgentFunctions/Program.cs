@@ -3,6 +3,7 @@ using Anthropic.Core;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using HqAgent.Functions.Services;
+using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,19 +25,14 @@ var host = new HostBuilder()
             ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured");
 
         services.AddSingleton(new BlobServiceClient(storageConnection));
-
-        services.AddSingleton(sp =>
-        {
-            var tableClient = new TableClient(storageConnection, "ContractExtractions");
-            tableClient.CreateIfNotExists();
-            return tableClient;
-        });
+        services.AddSingleton(new TableServiceClient(storageConnection));
 
         services.AddSingleton<IAnthropicClient>(
             new AnthropicClient(new ClientOptions { ApiKey = anthropicApiKey }));
 
+        services.AddSingleton<BlobStorageService>();
+        services.AddSingleton<TableStorageService>();
         services.AddSingleton<ContractWorkflow>();
-        services.AddSingleton<ExtractionTableWriter>();
     })
     .Build();
 

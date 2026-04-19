@@ -1,8 +1,11 @@
-using System.Text.Json;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
-using ContractOrchestratorAgent.Models;
+using Azure.Storage.Queues;
 using ContractOrchestratorAgent.Services;
+using HqAgent.Shared.Models;
+using HqAgent.Shared.Abstractions;
+using HqAgent.Shared.Storage;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,49 +15,45 @@ var storageConnStr = builder.Configuration["STORAGE_CONNECTION_STRING"]
 
 builder.Services.AddSingleton(new BlobServiceClient(storageConnStr));
 builder.Services.AddSingleton(new TableServiceClient(storageConnStr));
+builder.Services.AddSingleton(new QueueServiceClient(storageConnStr));
 
-// ── Claude (raw HttpClient — see AnthropicHttpClient for why) ─────────────────
-builder.Services.AddHttpClient<AnthropicHttpClient>();
+// ── AI model client ───────────────────────────────────────────────────────────
+builder.Services.AddHttpClient<IAIModelClient, AnthropicHttpClient>();
 
 // ── Agent services ────────────────────────────────────────────────────────────
-builder.Services.AddScoped<BlobDownloadService>();
-builder.Services.AddScoped<ClaudeService>();
+builder.Services.AddScoped<BlobStorageService>();
+builder.Services.AddScoped<ContractAnalysisService>();
 builder.Services.AddScoped<TableStorageService>();
 builder.Services.AddScoped<ContractProcessor>();
-
-// ── Dapr ──────────────────────────────────────────────────────────────────────
-builder.Services.AddDaprClient();
 
 var app = builder.Build();
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
-// ── Dapr input binding endpoint ───────────────────────────────────────────────
-// Dapr calls this when a message arrives on the contract-processing queue.
-// Returning 2xx removes the message from the queue; returning 5xx causes a retry.
-app.MapPost("/contract-processing-queue", async (
-    HttpRequest                    httpRequest,
-    ContractProcessor              processor,
-    ILogger<Program>               logger,
-    CancellationToken              ct) =>
+// ── Contract processing endpoint ──────────────────────────────────────────────
+// Accepts a ContractMessage as JSON and runs the analysis pipeline.
+// Returns 200 on success, 500 on failure (callers may retry).
+app.MapPost("/process", async (
+    HttpRequest           httpRequest,
+    ContractProcessor     processor,
+    ILogger<Program>      logger,
+    CancellationToken     ct) =>
 {
     string body;
     using (var reader = new StreamReader(httpRequest.Body))
         body = await reader.ReadToEndAsync(ct);
 
-    logger.LogInformation("Dapr binding message received: {Body}", body);
-
-    ContractProcessingMessage? message;
+    ContractMessage? message;
     try
     {
-        message = JsonSerializer.Deserialize<ContractProcessingMessage>(
+        message = JsonSerializer.Deserialize<ContractMessage>(
             body,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Failed to deserialise binding message: {Body}", body);
+        logger.LogError(ex, "Failed to deserialise message: {Body}", body);
         return Results.BadRequest("Invalid message format");
     }
 
@@ -73,7 +72,7 @@ app.MapPost("/contract-processing-queue", async (
     {
         logger.LogError(ex,
             "Processing failed for correlationId:{CorrelationId}", message.CorrelationId);
-        return Results.StatusCode(500); // Dapr retries on non-2xx
+        return Results.StatusCode(500);
     }
 });
 

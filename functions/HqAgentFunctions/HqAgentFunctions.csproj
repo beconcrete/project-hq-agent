@@ -15,12 +15,14 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.17.*" />
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.22.*" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="1.4.*" />
-    <PackageReference Include="Azure.Data.Tables" Version="12.*" />
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.*" />
     <PackageReference Include="Anthropic" Version="12.*" />
     <PackageReference Include="Microsoft.Agents.AI" Version="1.1.*" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.1.*" />
     <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.1.0-rc1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\HqAgent.Shared\HqAgent.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

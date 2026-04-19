@@ -1,8 +1,9 @@
 using System.Text.Json;
 using Azure.Data.Tables;
-using ContractOrchestratorAgent.Models;
+using HqAgent.Shared.Models;
+using Microsoft.Extensions.Logging;
 
-namespace ContractOrchestratorAgent.Services;
+namespace HqAgent.Shared.Storage;
 
 public class TableStorageService
 {
@@ -20,19 +21,19 @@ public class TableStorageService
         string            correlationId,
         string            blobPath,
         ExtractionResult  extraction,
-        string            modelUsed,
         CancellationToken ct = default)
     {
         var entity = new ContractExtractionEntity
         {
-            PartitionKey = correlationId,
-            RowKey       = "extraction",
-            BlobPath     = blobPath,
-            DocumentType = extraction.DocumentType,
-            Fields       = JsonSerializer.Serialize(extraction),
-            ModelUsed    = modelUsed,
-            ProcessedAt  = DateTime.UtcNow,
-            Status       = "completed",
+            PartitionKey     = correlationId,
+            RowKey           = "extraction",
+            BlobPath         = blobPath,
+            DocumentType     = extraction.DocumentType,
+            TriageConfidence = extraction.TriageConfidence,
+            Fields           = JsonSerializer.Serialize(extraction),
+            ModelUsed        = extraction.ModelUsed,
+            ProcessedAt      = DateTime.UtcNow,
+            Status           = extraction.PendingReview ? "pending_review" : "completed",
         };
 
         var table = _client.GetTableClient(TableName);
@@ -40,7 +41,7 @@ public class TableStorageService
         await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
 
         _logger.LogInformation(
-            "Wrote extraction record — correlationId:{CorrelationId} docType:{DocType} model:{Model}",
-            correlationId, extraction.DocumentType, modelUsed);
+            "Wrote extraction record — correlationId:{CorrelationId} docType:{DocType} status:{Status}",
+            correlationId, extraction.DocumentType, entity.Status);
     }
 }

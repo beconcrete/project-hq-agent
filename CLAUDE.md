@@ -19,10 +19,45 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
   /Middleware                # RequireAccessMiddleware (auth on every HTTP request)
 /functions                   # Separate Azure Function App — background/event-driven only (C#, isolated worker)
   /HqAgentFunctions          # Blob triggers, queue triggers, timer triggers — NOT browser-facing
+/agents                      # Agent projects — each agent is its own project
+  /contract-orchestrator-agent   # HTTP-triggered contract analysis (tool-use pipeline)
+  /contract-chat-agent           # (in progress)
+/shared                      # Shared C# library — referenced by api/, functions/, and agents/
+  /HqAgent.Shared            # HqAgent.Shared.csproj — targets net8.0 for broad compatibility
+  /HqAgent.Shared.Tests      # Unit tests for the shared library
 /infra                       # Infrastructure scripts and config
 /docs                        # Architecture docs
 /.github/workflows           # CI/CD pipelines
 ```
+
+## Shared Library (`shared/HqAgent.Shared`)
+
+`HqAgent.Shared` is a `net8.0` class library referenced by `api/`, `functions/HqAgentFunctions`, `agents/contract-orchestrator-agent`, and `agents/contract-chat-agent`. It contains everything that crosses project boundaries.
+
+### What lives in shared
+
+| Namespace | Contents |
+|---|---|
+| `HqAgent.Shared.Models` | `ContractMessage` (queue message), `ExtractionResult` (open-ended), `ContractExtractionEntity` (Table entity) |
+| `HqAgent.Shared.Storage` | `BlobStorageService` (download blobs), `TableStorageService` (write/read `ContractExtractions`) |
+| `HqAgent.Shared.Abstractions` | `IAIModelClient` (interface for AI model calls; implemented by `AnthropicHttpClient` in agents) |
+
+### Rules
+
+- **Never duplicate** `BlobStorageService`, `TableStorageService`, `ExtractionResult`, or `ContractMessage` in any project — always reference shared.
+- `IAIModelClient` is the injection point for AI calls in agents. DI registers: `AddHttpClient<IAIModelClient, AnthropicHttpClient>()`.
+- `ExtractionResult` uses an open `Dictionary<string, JsonElement>` for extracted fields — no fixed schema. The model decides what fields are relevant.
+- `TableStorageService.WriteExtractionAsync` automatically sets `status = "pending_review"` when `ExtractionResult.PendingReview = true`.
+
+### CI/CD — shared triggers all three pipelines
+
+A change to `shared/**` triggers **all** deployment workflows:
+
+| Workflow | Deploys | Triggered by |
+|---|---|---|
+| `deploy-frontend.yml` | `api/` + frontend | `frontend/**`, `api/**`, `shared/**` |
+| `deploy-functions.yml` | `functions/HqAgentFunctions` | `functions/**`, `shared/**` |
+| `deploy-agent.yml` | `agents/contract-orchestrator-agent` | `agents/contract-orchestrator-agent/**`, `shared/**` |
 
 ## Azure Resources
 

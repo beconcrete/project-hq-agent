@@ -1,6 +1,6 @@
 using Anthropic;
-using Azure.Storage.Blobs;
-using HqAgent.Functions.Models;
+using HqAgent.Shared.Models;
+using HqAgent.Shared.Storage;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Anthropic;
 using Microsoft.Agents.AI.Workflows;
@@ -14,7 +14,7 @@ namespace HqAgent.Functions.Services;
 
 public class ContractWorkflow
 {
-    private readonly BlobServiceClient _blobs;
+    private readonly BlobStorageService _blobs;
     private readonly AIAgent _workflowAgent;
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _anthropicApiKey;
@@ -22,52 +22,46 @@ public class ContractWorkflow
 
     private const string TriageInstructions = """
         You are a contract classification specialist.
-        Classify the document type from: NDA, MSA, LOI, ASSIGNMENT, SERVICE_AGREEMENT, EMPLOYMENT, LEASE, OTHER.
-        Transfer to the extraction agent immediately. Do not output any text.
+        Identify the type of legal document with a free-text description
+        (e.g. "Non-Disclosure Agreement", "Software Licence", "Framework Agreement",
+        "Public Sector Procurement Contract"). Set confidence from 0.0 to 1.0.
+
+        If confidence is below 0.7, output ONLY this JSON object and stop — do NOT transfer to extraction:
+        {
+          "documentType": "<your classification>",
+          "triageConfidence": <confidence>,
+          "extractedFields": null,
+          "extractionConfidence": 0.0,
+          "modelUsed": "claude-haiku-4-5-20251001",
+          "pendingReview": true
+        }
+
+        Otherwise, transfer to the extraction agent immediately. Do not output any text.
         """;
 
     private const string ExtractionInstructions = """
-        You are a contract analyst. Extract structured fields from the contract and return a JSON object.
-        Required fields:
-        {
-          "documentType": "string — NDA/MSA/LOI/ASSIGNMENT/SERVICE_AGREEMENT/EMPLOYMENT/LEASE/OTHER",
-          "parties": ["string"],
-          "effectiveDate": "ISO 8601 date string or null",
-          "expiryDate": "ISO 8601 date string or null",
-          "noticePeriod": "string or null",
-          "governingLaw": "string or null",
-          "keyObligations": ["string"],
-          "autoRenewal": true or false,
-          "riskFlags": ["string"],
-          "confidence": number from 0.0 to 1.0,
-          "modelUsed": "claude-sonnet-4-6"
-        }
-        Return only valid JSON — no markdown, no code fences, no explanation.
-        If your confidence is below 0.7, transfer to the escalation agent for a more thorough analysis.
-        """;
+        You are a contract analyst. The triage agent has classified this document.
+        Read the conversation history for the document type and triage confidence.
 
-    private const string EscalationInstructions = """
-        You are a senior contract analyst. The initial extraction had low confidence — perform careful, thorough analysis.
-        Extract all fields from the contract and return a JSON object:
+        Extract the fields that are relevant for this specific document type — do not use a fixed schema.
+        Common fields: parties (array), effectiveDate (ISO 8601), expiryDate (ISO 8601),
+        noticePeriodDays (integer), governingLaw, keyObligations (array), autoRenewal (boolean),
+        riskFlags (array) — include whatever is most relevant for this document.
+
+        Output ONLY this JSON object, no markdown, no code fences, no other text:
         {
-          "documentType": "string — NDA/MSA/LOI/ASSIGNMENT/SERVICE_AGREEMENT/EMPLOYMENT/LEASE/OTHER",
-          "parties": ["string"],
-          "effectiveDate": "ISO 8601 date string or null",
-          "expiryDate": "ISO 8601 date string or null",
-          "noticePeriod": "string or null",
-          "governingLaw": "string or null",
-          "keyObligations": ["string"],
-          "autoRenewal": true or false,
-          "riskFlags": ["string"],
-          "confidence": number from 0.0 to 1.0,
-          "modelUsed": "claude-opus-4-6"
+          "documentType": "<document type from triage>",
+          "triageConfidence": <triage confidence from chat history>,
+          "extractedFields": { <your extracted key-value fields> },
+          "extractionConfidence": <your confidence 0.0-1.0>,
+          "modelUsed": "claude-sonnet-4-6",
+          "pendingReview": false
         }
-        Return only valid JSON — no markdown, no code fences, no explanation.
         """;
 
     public ContractWorkflow(
         IAnthropicClient anthropic,
-        BlobServiceClient blobs,
+        BlobStorageService blobs,
         IHttpClientFactory httpFactory,
         IConfiguration config,
         ILoggerFactory loggerFactory)
@@ -82,7 +76,7 @@ public class ContractWorkflow
             model: "claude-haiku-4-5-20251001",
             instructions: TriageInstructions,
             name: "triage",
-            description: "Classifies the contract document type",
+            description: "Classifies the contract document type; flags for review if confidence is low",
             loggerFactory: loggerFactory
         );
 
@@ -90,36 +84,27 @@ public class ContractWorkflow
             model: "claude-sonnet-4-6",
             instructions: ExtractionInstructions,
             name: "extraction",
-            description: "Extracts structured contract fields; escalates when confidence is below 0.7",
-            loggerFactory: loggerFactory
-        );
-
-        var escalationAgent = anthropic.AsAIAgent(
-            model: "claude-opus-4-6",
-            instructions: EscalationInstructions,
-            name: "escalation",
-            description: "Performs careful re-extraction for low-confidence contracts",
+            description: "Extracts open-ended contract fields for any document type",
             loggerFactory: loggerFactory
         );
 
 #pragma warning disable MAAIW001
         var workflow = new HandoffWorkflowBuilder(triageAgent)
             .WithHandoff(triageAgent, extractionAgent)
-            .WithHandoff(extractionAgent, escalationAgent)
             .Build();
 #pragma warning restore MAAIW001
 
         _workflowAgent = workflow.AsAIAgent(
             id: "contract-workflow",
             name: "ContractWorkflow",
-            description: "Processes contracts through triage, extraction, and optional escalation",
+            description: "Processes contracts through triage and extraction",
             executionEnvironment: InProcessExecution.Default,
             includeExceptionDetails: false,
             includeWorkflowOutputsInResponse: true
         );
     }
 
-    public async Task<(ExtractionResult Extraction, string ModelUsed)> RunAsync(
+    public async Task<ExtractionResult> RunAsync(
         ContractMessage msg,
         CancellationToken ct = default)
     {
@@ -131,20 +116,12 @@ public class ContractWorkflow
 
         _logger.LogInformation("Workflow complete for {CorrelationId}", msg.CorrelationId);
 
-        var extraction = ParseExtraction(raw);
-        var modelUsed = extraction.ModelUsed ?? "claude-sonnet-4-6";
-        return (extraction, modelUsed);
+        return ParseExtraction(raw);
     }
 
     private async Task<ChatMessage> BuildMessageAsync(ContractMessage msg, CancellationToken ct)
     {
-        var container = _blobs.GetBlobContainerClient(msg.ContainerName);
-        var blob = container.GetBlobClient(msg.BlobName);
-        var download = await blob.DownloadContentAsync(ct);
-        var bytes = download.Value.Content.ToArray();
-        var contentType = download.Value.Details.ContentType ?? "";
-
-        _logger.LogInformation("Downloaded {BlobName}: {Size} bytes", msg.BlobName, bytes.Length);
+        var (bytes, contentType) = await _blobs.DownloadAsync(msg.ContainerName, msg.BlobName, ct);
 
         string text;
         if (IsPdf(contentType, msg.BlobName))

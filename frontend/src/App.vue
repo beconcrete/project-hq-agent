@@ -1,10 +1,8 @@
 <template>
-  <!-- Loading -->
-  <div v-if="auth.state.isLoading" class="auth-gate">
-    <img src="/logo.jpg" alt="HQ Agent" class="signin-logo" />
-  </div>
+  <!-- Loading — silent spinner, no sign-in UI -->
+  <div v-if="auth.state.isLoading" class="app-loading" />
 
-  <!-- Unauthenticated -->
+  <!-- Unauthenticated — only shown once loading has definitively finished -->
   <div v-else-if="!auth.state.isAuthenticated" class="auth-gate">
     <img src="/logo.jpg" alt="HQ Agent" class="signin-logo" />
     <p v-if="auth.state.error === 'access_denied'" class="auth-error">

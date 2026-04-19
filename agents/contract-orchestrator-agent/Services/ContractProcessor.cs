@@ -1,86 +1,77 @@
-using ContractOrchestratorAgent.Models;
-using Dapr.Client;
+using System.Text.Json;
+using Azure.Storage.Queues;
+using HqAgent.Shared.Models;
+using HqAgent.Shared.Storage;
 
 namespace ContractOrchestratorAgent.Services;
 
-/// <summary>
-/// Top-level orchestrator: download → classify → extract → persist → notify.
-/// </summary>
 public class ContractProcessor
 {
-    private readonly BlobDownloadService  _blobs;
-    private readonly ClaudeService        _claude;
-    private readonly TableStorageService  _table;
-    private readonly DaprClient           _dapr;
+    private readonly BlobStorageService  _blobs;
+    private readonly ContractAnalysisService _analysis;
+    private readonly TableStorageService _table;
+    private readonly QueueServiceClient  _queues;
     private readonly ILogger<ContractProcessor> _logger;
 
-    private const string PubSubName = "hq-pubsub";
-    private const string TopicName  = "contract-completed";
+    private const string CompletedQueueName = "contract-completed";
 
     public ContractProcessor(
-        BlobDownloadService       blobs,
-        ClaudeService             claude,
-        TableStorageService       table,
-        DaprClient                dapr,
-        ILogger<ContractProcessor> logger)
+        BlobStorageService           blobs,
+        ContractAnalysisService      analysis,
+        TableStorageService          table,
+        QueueServiceClient           queues,
+        ILogger<ContractProcessor>   logger)
     {
-        _blobs  = blobs;
-        _claude = claude;
-        _table  = table;
-        _dapr   = dapr;
-        _logger = logger;
+        _blobs    = blobs;
+        _analysis = analysis;
+        _table    = table;
+        _queues   = queues;
+        _logger   = logger;
     }
 
-    public async Task ProcessAsync(ContractProcessingMessage message, CancellationToken ct = default)
+    public async Task ProcessAsync(ContractMessage message, CancellationToken ct = default)
     {
         _logger.LogInformation(
             "Processing contract — correlationId:{CorrelationId} blob:{Blob}",
             message.CorrelationId, message.BlobName);
 
-        // 1. Download blob
         var (contractBytes, contentType) = await _blobs.DownloadAsync(
             message.ContainerName, message.BlobName, ct);
 
-        // Normalise to a media type Claude accepts
         var mediaType = contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase)
             ? "application/pdf"
-            : "application/pdf"; // default — expand when supporting DOCX
+            : "application/pdf";
 
-        // 2. Classify + extract via Claude
-        var (extraction, modelUsed) = await _claude.ExtractAsync(contractBytes, mediaType, ct);
+        var extraction = await _analysis.AnalyzeAsync(contractBytes, mediaType, ct);
 
         _logger.LogInformation(
-            "Extraction complete — docType:{DocType} confidence:{C:P0} model:{Model}",
-            extraction.DocumentType, extraction.Confidence, modelUsed);
+            "Analysis complete — docType:{DocType} pendingReview:{Pending} model:{Model}",
+            extraction.DocumentType, extraction.PendingReview, extraction.ModelUsed);
 
-        // 3. Persist to Table Storage
-        await _table.WriteExtractionAsync(
-            message.CorrelationId, message.BlobName, extraction, modelUsed, ct);
+        await _table.WriteExtractionAsync(message.CorrelationId, message.BlobName, extraction, ct);
 
-        // 4. Publish completion event via Dapr pub/sub (best-effort — WebSocket handler subscribes)
+        // Notify downstream (WebSocket handler or other consumers) via Azure Queue Storage
         try
         {
-            await _dapr.PublishEventAsync(
-                pubsubName : PubSubName,
-                topicName  : TopicName,
-                data       : new
-                {
-                    correlationId = message.CorrelationId,
-                    documentType  = extraction.DocumentType,
-                    status        = "completed",
-                    processedAt   = DateTime.UtcNow,
-                },
-                cancellationToken: ct);
+            var queue = _queues.GetQueueClient(CompletedQueueName);
+            await queue.CreateIfNotExistsAsync(cancellationToken: ct);
+
+            var notification = JsonSerializer.Serialize(new
+            {
+                correlationId = message.CorrelationId,
+                documentType  = extraction.DocumentType,
+                status        = extraction.PendingReview ? "pending_review" : "completed",
+                processedAt   = DateTime.UtcNow,
+            });
+            await queue.SendMessageAsync(notification, ct);
 
             _logger.LogInformation(
-                "Published {Topic} event for {CorrelationId}", TopicName, message.CorrelationId);
+                "Enqueued completion notification for {CorrelationId}", message.CorrelationId);
         }
         catch (Exception ex)
         {
-            // Pub/sub is not yet wired — log and continue rather than failing the whole job
             _logger.LogWarning(ex,
-                "Could not publish {Topic} event for {CorrelationId} (Dapr pub/sub not ready?)",
-                TopicName, message.CorrelationId);
+                "Could not enqueue completion notification for {CorrelationId}", message.CorrelationId);
         }
     }
 }

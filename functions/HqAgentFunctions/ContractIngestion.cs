@@ -1,25 +1,25 @@
-using HqAgent.Functions.Models;
 using HqAgent.Functions.Services;
+using HqAgent.Shared.Models;
+using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace HqAgent.Functions;
 
 public class ContractIngestion
 {
     private readonly ContractWorkflow _workflow;
-    private readonly ExtractionTableWriter _tableWriter;
+    private readonly TableStorageService _table;
     private readonly ILogger<ContractIngestion> _logger;
 
     public ContractIngestion(
         ContractWorkflow workflow,
-        ExtractionTableWriter tableWriter,
+        TableStorageService table,
         ILogger<ContractIngestion> logger)
     {
         _workflow = workflow;
-        _tableWriter = tableWriter;
-        _logger = logger;
+        _table    = table;
+        _logger   = logger;
     }
 
     [Function(nameof(ContractIngestion))]
@@ -29,12 +29,12 @@ public class ContractIngestion
     {
         _logger.LogInformation("ContractIngestion triggered for {CorrelationId}", msg.CorrelationId);
 
-        var (extraction, modelUsed) = await _workflow.RunAsync(msg, context.CancellationToken);
-        var rawJson = JsonSerializer.Serialize(extraction);
-        await _tableWriter.WriteAsync(msg, extraction, rawJson, modelUsed, context.CancellationToken);
+        var extraction = await _workflow.RunAsync(msg, context.CancellationToken);
+
+        await _table.WriteExtractionAsync(msg.CorrelationId, msg.BlobName, extraction, context.CancellationToken);
 
         _logger.LogInformation(
-            "Contract {CorrelationId} stored — type: {DocumentType}, confidence: {Confidence:F2}, model: {Model}",
-            msg.CorrelationId, extraction.DocumentType, extraction.Confidence, modelUsed);
+            "Contract {CorrelationId} stored — type:{DocumentType} pendingReview:{Pending} model:{Model}",
+            msg.CorrelationId, extraction.DocumentType, extraction.PendingReview, extraction.ModelUsed);
     }
 }
