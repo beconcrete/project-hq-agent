@@ -34,29 +34,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Provision Function App if not exists
-        run: |
-          existing=$(az functionapp show \
-            --name hq-agent-orchestrator-app \
-            --resource-group hq-agent-resource-group \
-            --query name -o tsv 2>/dev/null || echo "")
-
-          if [ -z "$existing" ]; then
-            echo "Creating hq-agent-orchestrator-app..."
-            az functionapp create \
-              --name hq-agent-orchestrator-app \
-              --resource-group hq-agent-resource-group \
-              --storage-account hqagentstorage \
-              --consumption-plan-location northeurope \
-              --runtime dotnet-isolated \
-              --runtime-version 8 \
-              --functions-version 4 \
-              --os-type Linux \
-              --output none
-          else
-            echo "hq-agent-orchestrator-app already exists, skipping create."
-          fi
-
       - name: Deploy to Azure Function App
         uses: azure/webapps-deploy@v3
         with:
