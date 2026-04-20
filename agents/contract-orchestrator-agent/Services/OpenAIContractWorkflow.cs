@@ -212,9 +212,17 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
     private static ExtractionResult ParseExtraction(string raw)
     {
         var json = ExtractLastJson(raw);
-        return JsonSerializer.Deserialize<ExtractionResult>(json,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? throw new InvalidOperationException("Null deserialization result");
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        string  documentType        = root.TryGetProperty("documentType",        out var dt)  ? dt.GetString()  ?? "" : "";
+        double  triageConfidence    = root.TryGetProperty("triageConfidence",    out var tc)  ? tc.GetDouble()       : 0;
+        double  extractionConfidence= root.TryGetProperty("extractionConfidence",out var ec)  ? ec.GetDouble()       : 0;
+        string  modelUsed           = root.TryGetProperty("modelUsed",           out var mu)  ? mu.GetString()  ?? "" : "";
+        bool    pendingReview       = root.TryGetProperty("pendingReview",       out var pr)  ? pr.GetBoolean()      : false;
+        string? extractedFields     = root.TryGetProperty("extractedFields",     out var ef)  ? ef.GetRawText()      : null;
+
+        return new ExtractionResult(documentType, triageConfidence, extractedFields, extractionConfidence, modelUsed, pendingReview);
     }
 
     private static string ExtractLastJson(string text)

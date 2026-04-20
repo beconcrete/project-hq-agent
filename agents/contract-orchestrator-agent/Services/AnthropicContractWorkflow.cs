@@ -126,9 +126,7 @@ public class AnthropicContractWorkflow : IContractAnalysisWorkflow
             toolName: "extract_contract_fields", toolDescription: "Extract relevant fields from a legal contract",
             toolInputSchema: ExtractionSchema, maxTokens: 2048, ct: ct);
 
-        var extractedFields = new Dictionary<string, JsonElement>();
-        foreach (var prop in toolOutput.Fields.EnumerateObject())
-            extractedFields[prop.Name] = prop.Value.Clone();
+        var extractedFields = toolOutput.Fields.GetRawText();
 
         _logger.LogInformation("Extraction complete — confidence {C:P0}", toolOutput.Confidence);
 
