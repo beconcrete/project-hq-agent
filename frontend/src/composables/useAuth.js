@@ -56,7 +56,15 @@ export async function initAuth() {
       window.location.search.includes("state=")
     ) {
       await _client.handleRedirectCallback();
-      window.history.replaceState({}, document.title, "/");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // Attempt silent re-auth on page refresh — uses Auth0's session cookie.
+      // Throws 'login_required' if the session has expired; that's expected and safe to ignore.
+      try {
+        await _client.getTokenSilently();
+      } catch {
+        /* not authenticated */
+      }
     }
 
     if (await _client.isAuthenticated()) {
