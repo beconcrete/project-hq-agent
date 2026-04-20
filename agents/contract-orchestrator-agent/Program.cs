@@ -1,5 +1,3 @@
-using Anthropic;
-using Anthropic.Core;
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using ContractOrchestratorAgent.Services;
@@ -27,22 +25,7 @@ var host = new HostBuilder()
         services.AddSingleton<BlobStorageService>();
         services.AddSingleton<TableStorageService>();
 
-        var aiProvider = config["AI_PROVIDER"] ?? "openai";
-
-        if (aiProvider == "anthropic")
-        {
-            var anthropicApiKey = config["ANTHROPIC_API_KEY"]
-                ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured for Anthropic provider");
-
-            services.AddSingleton<IAnthropicClient>(
-                new AnthropicClient(new ClientOptions { ApiKey = anthropicApiKey }));
-
-            services.AddSingleton<IContractAnalysisWorkflow, AnthropicContractWorkflow>();
-        }
-        else
-        {
-            services.AddSingleton<IContractAnalysisWorkflow, OpenAIContractWorkflow>();
-        }
+        services.AddSingleton<IContractAnalysisWorkflow, OpenAIContractWorkflow>();
     })
     .Build();
 
