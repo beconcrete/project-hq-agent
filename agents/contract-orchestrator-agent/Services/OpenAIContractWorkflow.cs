@@ -185,7 +185,13 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
 
         var http = _httpFactory.CreateClient();
         using var resp = await http.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync(ct);
+            _logger.LogError("OpenAI PDF extraction error {Status}: {Body}", resp.StatusCode, err);
+            throw new HttpRequestException($"OpenAI returned {(int)resp.StatusCode}: {err}");
+        }
 
         var json = await resp.Content.ReadAsStringAsync(ct);
         var text = JsonDocument.Parse(json).RootElement
