@@ -234,11 +234,45 @@
                 <tr>
                   <th>{{ formatKey(key) }}</th>
                   <td>
-                    <template v-if="Array.isArray(value)">
+                    <!-- Array of objects → cards (e.g. parties) -->
+                    <template
+                      v-if="
+                        Array.isArray(value) &&
+                        value.length &&
+                        isObject(value[0])
+                      "
+                    >
+                      <div class="object-cards">
+                        <div
+                          v-for="(item, i) in value"
+                          :key="i"
+                          class="object-card"
+                        >
+                          <div v-if="item.name" class="object-card-name">
+                            {{ item.name }}
+                          </div>
+                          <dl class="object-card-props">
+                            <template v-for="(v, k) in item" :key="k">
+                              <div v-if="k !== 'name'" class="object-card-prop">
+                                <dt>{{ formatKey(k) }}</dt>
+                                <dd>{{ v ?? "—" }}</dd>
+                              </div>
+                            </template>
+                          </dl>
+                        </div>
+                      </div>
+                    </template>
+                    <!-- Array of primitives → plain list -->
+                    <template v-else-if="Array.isArray(value) && value.length">
                       <ul class="field-list">
                         <li v-for="(item, i) in value" :key="i">{{ item }}</li>
                       </ul>
                     </template>
+                    <!-- Empty array -->
+                    <template v-else-if="Array.isArray(value)">
+                      <span class="field-not-found">None</span>
+                    </template>
+                    <!-- Null / empty -->
                     <template
                       v-else-if="
                         value === null || value === undefined || value === ''
@@ -246,6 +280,13 @@
                     >
                       <span class="field-not-found">Not found</span>
                     </template>
+                    <!-- Boolean -->
+                    <template v-else-if="typeof value === 'boolean'">
+                      <span :class="value ? 'field-bool-yes' : 'field-bool-no'">
+                        {{ value ? "Yes" : "No" }}
+                      </span>
+                    </template>
+                    <!-- Scalar -->
                     <template v-else>{{ value }}</template>
                   </td>
                 </tr>
@@ -493,6 +534,10 @@ function flatFields(fields) {
   if (!fields || typeof fields !== "object") return {};
   return fields;
 }
+
+function isObject(val) {
+  return val !== null && typeof val === "object" && !Array.isArray(val);
+}
 </script>
 
 <style scoped>
@@ -610,12 +655,61 @@ function flatFields(fields) {
   color: var(--color-muted, #9ca3af);
   font-style: italic;
 }
+.field-bool-yes {
+  color: #15803d;
+  font-weight: 500;
+}
+.field-bool-no {
+  color: var(--color-muted, #6b7280);
+}
 .field-list {
   margin: 0;
   padding-left: 1.25rem;
 }
 .field-list li {
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.25rem;
+}
+.object-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+.object-card {
+  background: var(--color-bg, #f9fafb);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 0.625rem 0.75rem;
+}
+.object-card-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.35rem;
+  color: var(--color-text, #111827);
+}
+.object-card-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1rem;
+  margin: 0;
+}
+.object-card-prop {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+.object-card-prop dt {
+  color: var(--color-muted, #6b7280);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.object-card-prop dt::after {
+  content: ":";
+}
+.object-card-prop dd {
+  margin: 0;
+  color: var(--color-text, #374151);
 }
 
 .btn-icon {
