@@ -3,68 +3,50 @@ using System.Text.Json;
 using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Workflows;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using OpenAI;
 
 namespace ContractOrchestratorAgent.Services;
 
 /// <summary>
-/// Contract analysis pipeline using OpenAI + MAF handoff workflow.
-/// OpenAI supports assistant message prefill, so the MAF triage → extraction
-/// handoff works correctly (unlike Anthropic which rejects it).
+/// Contract analysis pipeline using direct sequential OpenAI calls.
+/// Step 1: Extract PDF text (gpt-4.1-mini, file content type).
+/// Step 2: Triage — classify document type + confidence (gpt-4.1-mini).
+/// Step 3: Extract fields (gpt-4.1) if triage confidence >= 0.7.
 /// </summary>
 public class OpenAIContractWorkflow : IContractAnalysisWorkflow
 {
     private readonly BlobStorageService _blobs;
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _apiKey;
-    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<OpenAIContractWorkflow> _logger;
-
-    private readonly IChatClient _triageChatClient;
-    private readonly IChatClient _extractionChatClient;
 
     private const string TriageModel     = "gpt-4.1-mini";
     private const string ExtractionModel = "gpt-4.1";
+    private const double ReviewThreshold = 0.7;
+    private const string CompletionsUrl  = "https://api.openai.com/v1/chat/completions";
 
-    private const string TriageInstructions = """
+    private const string TriageSystemPrompt = """
         You are a contract classification specialist.
         Identify the type of legal document with a free-text description
         (e.g. "Non-Disclosure Agreement", "Software Licence", "Framework Agreement",
         "Public Sector Procurement Contract"). Set confidence from 0.0 to 1.0.
-
-        If confidence is below 0.7, output ONLY this JSON object and stop — do NOT transfer to extraction:
-        {
-          "documentType": "<your classification>",
-          "triageConfidence": <confidence>,
-          "extractedFields": null,
-          "extractionConfidence": 0.0,
-          "modelUsed": "gpt-4.1-mini",
-          "pendingReview": true
-        }
-
-        Otherwise, transfer to the extraction agent immediately. Do not output any text.
+        Output ONLY JSON, no markdown, no code fences:
+        {"documentType": "...", "confidence": 0.0}
         """;
 
-    private const string ExtractionInstructions = """
-        You are a contract analyst. The triage agent has classified this document.
-        Read the conversation history for the document type and triage confidence.
-
-        Extract the fields that are relevant for this specific document type — do not use a fixed schema.
+    private const string ExtractionSystemPrompt = """
+        You are a contract analyst. Extract the fields that are relevant for this specific
+        document type — do not use a fixed schema.
         Common fields: parties (array), effectiveDate (ISO 8601), expiryDate (ISO 8601),
         noticePeriodDays (integer), governingLaw, keyObligations (array), autoRenewal (boolean),
         riskFlags (array) — include whatever is most relevant for this document.
-
-        Output ONLY this JSON object, no markdown, no code fences, no other text:
+        Output ONLY this JSON, no markdown, no code fences:
         {
-          "documentType": "<document type from triage>",
-          "triageConfidence": <triage confidence from chat history>,
-          "extractedFields": { <your extracted key-value fields> },
-          "extractionConfidence": <your confidence 0.0-1.0>,
+          "documentType": "<from triage>",
+          "triageConfidence": <from triage>,
+          "extractedFields": { <key-value fields> },
+          "extractionConfidence": <0.0-1.0>,
           "modelUsed": "gpt-4.1",
           "pendingReview": false
         }
@@ -76,80 +58,88 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
         IConfiguration config,
         ILoggerFactory loggerFactory)
     {
-        _blobs         = blobs;
-        _httpFactory   = httpFactory;
-        _loggerFactory = loggerFactory;
-        _logger        = loggerFactory.CreateLogger<OpenAIContractWorkflow>();
-
-        _apiKey = config["OPENAI_API_KEY"]
+        _blobs    = blobs;
+        _httpFactory = httpFactory;
+        _logger   = loggerFactory.CreateLogger<OpenAIContractWorkflow>();
+        _apiKey   = config["OPENAI_API_KEY"]
             ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
-
-        var openAiClient = new OpenAIClient(_apiKey);
-        _triageChatClient     = openAiClient.GetChatClient(TriageModel).AsIChatClient();
-        _extractionChatClient = openAiClient.GetChatClient(ExtractionModel).AsIChatClient();
     }
 
     public async Task<ExtractionResult> RunAsync(ContractMessage msg, CancellationToken ct = default)
     {
-        _logger.LogInformation("Processing contract {CorrelationId} — {BlobName} — apiKeyLength:{KeyLen} apiKeyPrefix:{Prefix}",
-            msg.CorrelationId, msg.BlobName, _apiKey.Length, _apiKey.Length >= 7 ? _apiKey[..7] : "(short)");
+        _logger.LogInformation("Processing contract {CorrelationId} — {BlobName}", msg.CorrelationId, msg.BlobName);
 
-        var userMessage = await BuildMessageAsync(msg, ct);
-
-        var triageAgent = new ChatClientAgent(_triageChatClient, new ChatClientAgentOptions
-        {
-            Name        = "triage",
-            Description = "Classifies the contract document type; flags for human review if confidence is below 0.7",
-            ChatOptions = new ChatOptions { Instructions = TriageInstructions },
-        });
-
-        var extractionAgent = new ChatClientAgent(_extractionChatClient, new ChatClientAgentOptions
-        {
-            Name        = "extraction",
-            Description = "Extracts open-ended contract fields for any document type",
-            ChatOptions = new ChatOptions { Instructions = ExtractionInstructions },
-        });
-
-#pragma warning disable MAAIW001
-        var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(triageAgent)
-            .WithHandoff(triageAgent, extractionAgent)
-            .Build();
-#pragma warning restore MAAIW001
-
-        await using var run = await InProcessExecution.OpenStreamingAsync(
-            workflow, sessionId: msg.CorrelationId);
-
-        await run.TrySendMessageAsync(userMessage);
-        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-
-        var sb = new StringBuilder();
-        await foreach (var evt in run.WatchStreamAsync().WithCancellation(ct))
-        {
-            if (evt is AgentResponseUpdateEvent update)
-                sb.Append(update.Update.Text ?? "");
-            else if (evt is WorkflowErrorEvent err)
-                throw err.Exception ?? new InvalidOperationException("Workflow error during contract processing");
-            else if (evt is WorkflowOutputEvent)
-                break;
-        }
-
-        var raw = sb.ToString();
-        _logger.LogInformation("Workflow output for {CorrelationId}: {Raw}", msg.CorrelationId, raw);
-
-        return ParseExtraction(raw);
-    }
-
-    private async Task<ChatMessage> BuildMessageAsync(ContractMessage msg, CancellationToken ct)
-    {
         var (bytes, contentType) = await _blobs.DownloadAsync(msg.ContainerName, msg.BlobName, ct);
 
+        // Step 1: extract text
         string text;
-        if (IsPdf(contentType, msg.BlobName))
+        if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ||
+            msg.BlobName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
             text = await ExtractPdfTextAsync(bytes, ct);
         else
             text = Encoding.UTF8.GetString(bytes);
 
-        return new ChatMessage(ChatRole.User, [new TextContent(text)]);
+        // Step 2: triage
+        _logger.LogInformation("Triaging with {Model}", TriageModel);
+        var triageJson = await ChatAsync(TriageModel, TriageSystemPrompt, text, 256, ct);
+        _logger.LogInformation("Triage raw: {Raw}", triageJson);
+
+        using var triageDoc  = JsonDocument.Parse(ExtractLastJson(triageJson));
+        var triageRoot       = triageDoc.RootElement;
+        var documentType     = triageRoot.TryGetProperty("documentType", out var dt) ? dt.GetString() ?? "" : "";
+        var triageConfidence = triageRoot.TryGetProperty("confidence",   out var tc) ? tc.GetDouble()       : 0;
+
+        _logger.LogInformation("Triage: {DocType} confidence {Confidence:P0}", documentType, triageConfidence);
+
+        if (triageConfidence < ReviewThreshold)
+        {
+            _logger.LogWarning("Low confidence {C:P0} — flagging for review", triageConfidence);
+            return new ExtractionResult(documentType, triageConfidence, null, 0, TriageModel, true);
+        }
+
+        // Step 3: extraction
+        _logger.LogInformation("Extracting with {Model}", ExtractionModel);
+        var userPrompt    = $"Triage result: {triageJson}\n\nDocument:\n{text}";
+        var extractionJson = await ChatAsync(ExtractionModel, ExtractionSystemPrompt, userPrompt, 2048, ct);
+        _logger.LogInformation("Extraction raw: {Raw}", extractionJson[..Math.Min(500, extractionJson.Length)]);
+
+        return ParseExtraction(extractionJson);
+    }
+
+    private async Task<string> ChatAsync(
+        string model, string systemPrompt, string userContent, int maxTokens, CancellationToken ct)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            model,
+            max_tokens = maxTokens,
+            messages = new[]
+            {
+                new { role = "system", content = systemPrompt },
+                new { role = "user",   content = userContent  },
+            }
+        });
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, CompletionsUrl);
+        req.Headers.Add("Authorization", $"Bearer {_apiKey}");
+        req.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+        var http = _httpFactory.CreateClient();
+        using var resp = await http.SendAsync(req, ct);
+
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync(ct);
+            _logger.LogError("OpenAI {Model} error {Status}: {Body}", model, resp.StatusCode, err);
+            throw new HttpRequestException($"OpenAI {model} returned {(int)resp.StatusCode}: {err}");
+        }
+
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        return JsonDocument.Parse(json).RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString() ?? "";
     }
 
     private async Task<string> ExtractPdfTextAsync(byte[] pdfBytes, CancellationToken ct)
@@ -180,7 +170,7 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
             }
         });
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+        using var req = new HttpRequestMessage(HttpMethod.Post, CompletionsUrl);
         req.Headers.Add("Authorization", $"Bearer {_apiKey}");
         req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
@@ -205,22 +195,18 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
         return text;
     }
 
-    private static bool IsPdf(string contentType, string blobName) =>
-        contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ||
-        blobName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-
     private static ExtractionResult ParseExtraction(string raw)
     {
         var json = ExtractLastJson(raw);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        string  documentType        = root.TryGetProperty("documentType",        out var dt)  ? dt.GetString()  ?? "" : "";
-        double  triageConfidence    = root.TryGetProperty("triageConfidence",    out var tc)  ? tc.GetDouble()       : 0;
-        double  extractionConfidence= root.TryGetProperty("extractionConfidence",out var ec)  ? ec.GetDouble()       : 0;
-        string  modelUsed           = root.TryGetProperty("modelUsed",           out var mu)  ? mu.GetString()  ?? "" : "";
-        bool    pendingReview       = root.TryGetProperty("pendingReview",       out var pr)  ? pr.GetBoolean()      : false;
-        string? extractedFields     = root.TryGetProperty("extractedFields",     out var ef)  ? ef.GetRawText()      : null;
+        string  documentType         = root.TryGetProperty("documentType",         out var dt) ? dt.GetString()  ?? "" : "";
+        double  triageConfidence     = root.TryGetProperty("triageConfidence",     out var tc) ? tc.GetDouble()       : 0;
+        double  extractionConfidence = root.TryGetProperty("extractionConfidence", out var ec) ? ec.GetDouble()       : 0;
+        string  modelUsed            = root.TryGetProperty("modelUsed",            out var mu) ? mu.GetString()  ?? "" : "";
+        bool    pendingReview        = root.TryGetProperty("pendingReview",        out var pr) ? pr.GetBoolean()      : false;
+        string? extractedFields      = root.TryGetProperty("extractedFields",      out var ef) ? ef.GetRawText()      : null;
 
         return new ExtractionResult(documentType, triageConfidence, extractedFields, extractionConfidence, modelUsed, pendingReview);
     }
@@ -229,7 +215,6 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
     {
         string? last = null;
         var searchFrom = 0;
-
         while (true)
         {
             var start = text.IndexOf('{', searchFrom);
@@ -238,29 +223,23 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
             if (json != null) last = json;
             searchFrom = start + 1;
         }
-
         return last ?? throw new InvalidOperationException(
-            $"No JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
+            $"No JSON in response. Preview: {text[..Math.Min(300, text.Length)]}");
     }
 
     private static string? TryExtractJsonAt(string text, int start)
     {
-        int depth = 0;
-        bool inString = false;
-        bool escaped = false;
-
+        int depth = 0; bool inString = false; bool escaped = false;
         for (int i = start; i < text.Length; i++)
         {
             var c = text[i];
-            if (escaped) { escaped = false; continue; }
-            if (c == '\\' && inString) { escaped = true; continue; }
-            if (c == '"') { inString = !inString; continue; }
-            if (inString) continue;
-            if (c == '{') depth++;
-            else if (c == '}' && --depth == 0)
-                return text[start..(i + 1)];
+            if (escaped)           { escaped = false; continue; }
+            if (c == '\\' && inString) { escaped = true;  continue; }
+            if (c == '"')          { inString = !inString; continue; }
+            if (inString)          continue;
+            if (c == '{')          depth++;
+            else if (c == '}' && --depth == 0) return text[start..(i + 1)];
         }
-
         return null;
     }
 }
