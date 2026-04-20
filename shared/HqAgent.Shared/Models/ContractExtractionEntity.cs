@@ -15,6 +15,9 @@ public class ContractExtractionEntity : ITableEntity
     public ETag            ETag         { get; set; }
 
     public string   BlobPath             { get; set; } = string.Empty;
+    public string   UserId               { get; set; } = string.Empty;
+    public string   FileName             { get; set; } = string.Empty;
+    public DateTime UploadedAt           { get; set; }
     public string   DocumentType         { get; set; } = string.Empty;
     public double   TriageConfidence     { get; set; }
 

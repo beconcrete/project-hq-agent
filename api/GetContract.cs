@@ -1,0 +1,92 @@
+using System.Net;
+using System.Text.Json;
+using HqAgent.Shared.Storage;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
+
+namespace HqAgent.Api;
+
+/// <summary>
+/// Returns the full extraction record for a contract.
+/// GET /api/get-contract?correlationId={id}
+/// Admin bypasses ownership check; user role requires matching UserId.
+/// Returns 403 (not 404) when the record exists but belongs to a different user.
+/// </summary>
+public class GetContract
+{
+    private readonly IHttpClientFactory _httpFactory;
+    private readonly TableStorageService _table;
+    private readonly string _appId;
+
+    public GetContract(IHttpClientFactory httpFactory, TableStorageService table, IConfiguration config)
+    {
+        _httpFactory = httpFactory;
+        _table       = table;
+        _appId       = config["APP_ID"] ?? "hqagents";
+    }
+
+    [Function("GetContract")]
+    public async Task<HttpResponseData> Run(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "get-contract")] HttpRequestData req,
+        FunctionContext context)
+    {
+        RoleGuard guard;
+        try { guard = await RoleGuard.CheckAsync(req, _httpFactory, _appId, Roles.User); }
+        catch { return await PlainResponse(req, HttpStatusCode.ServiceUnavailable, "Auth service unavailable"); }
+
+        if (!guard.Allowed)
+            return await PlainResponse(req, HttpStatusCode.Forbidden, "Forbidden");
+
+        var correlationId = System.Web.HttpUtility.ParseQueryString(req.Url.Query)["correlationId"];
+        if (string.IsNullOrWhiteSpace(correlationId))
+            return await PlainResponse(req, HttpStatusCode.BadRequest, "correlationId is required");
+
+        var userId  = context.Items.TryGetValue("userId", out var uid) ? uid?.ToString() ?? "" : "";
+        var isAdmin = guard.RoleIds.Contains(Roles.Admin);
+
+        var entity = await _table.GetExtractionAsync(correlationId);
+        if (entity is null)
+            return await PlainResponse(req, HttpStatusCode.NotFound, "Not found");
+
+        if (!isAdmin && entity.UserId != userId)
+            return await PlainResponse(req, HttpStatusCode.Forbidden, "Forbidden");
+
+        JsonElement? fields = null;
+        if (!string.IsNullOrEmpty(entity.Fields))
+        {
+            try
+            {
+                var extraction = JsonSerializer.Deserialize<JsonElement>(entity.Fields);
+                if (extraction.TryGetProperty("extractedFields", out var ef) &&
+                    ef.ValueKind != JsonValueKind.Null)
+                    fields = ef;
+            }
+            catch (JsonException) { }
+        }
+
+        var okRes = req.CreateResponse();
+        await okRes.WriteAsJsonAsync(new
+        {
+            correlationId  = entity.PartitionKey,
+            fileName       = entity.FileName,
+            uploadedAt     = entity.UploadedAt,
+            processedAt    = entity.ProcessedAt,
+            status         = entity.Status,
+            documentType   = entity.DocumentType,
+            triageConfidence = entity.TriageConfidence,
+            fields,
+        });
+        okRes.StatusCode = HttpStatusCode.OK;
+        return okRes;
+    }
+
+    private static async Task<HttpResponseData> PlainResponse(
+        HttpRequestData req, HttpStatusCode status, string message)
+    {
+        var res = req.CreateResponse();
+        await res.WriteStringAsync(message);
+        res.StatusCode = status;
+        return res;
+    }
+}

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Azure;
 using Azure.Data.Tables;
 using HqAgent.Shared.Models;
 using Microsoft.Extensions.Logging;
@@ -18,16 +19,18 @@ public class TableStorageService
     }
 
     public async Task WriteExtractionAsync(
-        string            correlationId,
-        string            blobPath,
+        ContractMessage   message,
         ExtractionResult  extraction,
         CancellationToken ct = default)
     {
         var entity = new ContractExtractionEntity
         {
-            PartitionKey     = correlationId,
+            PartitionKey     = message.CorrelationId,
             RowKey           = "extraction",
-            BlobPath         = blobPath,
+            BlobPath         = message.BlobName,
+            UserId           = message.UserId,
+            FileName         = message.FileName,
+            UploadedAt       = message.UploadedAt,
             DocumentType     = extraction.DocumentType,
             TriageConfidence = extraction.TriageConfidence,
             Fields           = JsonSerializer.Serialize(extraction),
@@ -42,6 +45,68 @@ public class TableStorageService
 
         _logger.LogInformation(
             "Wrote extraction record — correlationId:{CorrelationId} docType:{DocType} status:{Status}",
-            correlationId, extraction.DocumentType, entity.Status);
+            message.CorrelationId, extraction.DocumentType, entity.Status);
+    }
+
+    public async Task WriteFailedAsync(
+        ContractMessage   message,
+        CancellationToken ct = default)
+    {
+        var entity = new ContractExtractionEntity
+        {
+            PartitionKey = message.CorrelationId,
+            RowKey       = "extraction",
+            BlobPath     = message.BlobName,
+            UserId       = message.UserId,
+            FileName     = message.FileName,
+            UploadedAt   = message.UploadedAt,
+            ProcessedAt  = DateTime.UtcNow,
+            Status       = "failed",
+        };
+
+        var table = _client.GetTableClient(TableName);
+        await table.CreateIfNotExistsAsync(cancellationToken: ct);
+        await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
+
+        _logger.LogInformation(
+            "Wrote failed record — correlationId:{CorrelationId}", message.CorrelationId);
+    }
+
+    public async Task<ContractExtractionEntity?> GetExtractionAsync(
+        string            correlationId,
+        CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableName);
+        try
+        {
+            var response = await table.GetEntityAsync<ContractExtractionEntity>(
+                correlationId, "extraction", cancellationToken: ct);
+            return response.Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<ContractExtractionEntity>> ListExtractionsAsync(
+        string?           userId = null,
+        CancellationToken ct     = default)
+    {
+        var table = _client.GetTableClient(TableName);
+        var results = new List<ContractExtractionEntity>();
+
+        var filter = userId != null
+            ? $"UserId eq '{userId}'"
+            : null;
+
+        await foreach (var entity in table.QueryAsync<ContractExtractionEntity>(
+            filter: filter, cancellationToken: ct))
+        {
+            results.Add(entity);
+        }
+
+        results.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt));
+        return results;
     }
 }

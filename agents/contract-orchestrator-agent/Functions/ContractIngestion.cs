@@ -37,10 +37,11 @@ public class ContractIngestion
         catch (Exception ex)
         {
             _logger.LogError(ex, "ContractIngestion failed for {CorrelationId}: {Message}", msg.CorrelationId, ex.Message);
+            await _table.WriteFailedAsync(msg, context.CancellationToken);
             throw;
         }
 
-        await _table.WriteExtractionAsync(msg.CorrelationId, msg.BlobName, extraction, context.CancellationToken);
+        await _table.WriteExtractionAsync(msg, extraction, context.CancellationToken);
 
         _logger.LogInformation(
             "Contract {CorrelationId} stored — type:{DocumentType} pendingReview:{Pending} model:{Model}",

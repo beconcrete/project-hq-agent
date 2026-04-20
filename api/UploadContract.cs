@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Queues;
@@ -143,15 +144,34 @@ public class UploadContract
             .GetQueueClient("contract-processing");
         await queueClient.CreateIfNotExistsAsync();
 
+        var uploadedAt = DateTime.UtcNow;
+
         var message = new ContractMessage(
             BlobName: blobName,
             CorrelationId: correlationId,
-            UploadedAt: DateTime.UtcNow,
-            ContainerName: "contracts");
+            UploadedAt: uploadedAt,
+            ContainerName: "contracts",
+            UserId: userId,
+            FileName: fileName);
 
         var messageJson = JsonSerializer.Serialize(message);
         await queueClient.SendMessageAsync(
             Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(messageJson)));
+
+        // Write initial "processing" row so list-contracts shows it immediately
+        var tableClient = new TableServiceClient(_storageConnectionString)
+            .GetTableClient("ContractExtractions");
+        await tableClient.CreateIfNotExistsAsync();
+        await tableClient.UpsertEntityAsync(new ContractExtractionEntity
+        {
+            PartitionKey = correlationId,
+            RowKey       = "extraction",
+            BlobPath     = blobName,
+            UserId       = userId,
+            FileName     = fileName,
+            UploadedAt   = uploadedAt,
+            Status       = "processing",
+        }, TableUpdateMode.Replace);
 
         var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new { correlationId, blobName, fileName, status = "processing" });

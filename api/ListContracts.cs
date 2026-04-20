@@ -1,0 +1,68 @@
+using System.Net;
+using HqAgent.Shared.Storage;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
+
+namespace HqAgent.Api;
+
+/// <summary>
+/// Lists all contracts visible to the caller.
+/// GET /api/list-contracts
+/// Admin receives all records; user role receives only their own (filtered by UserId).
+/// Results are sorted by UploadedAt descending.
+/// </summary>
+public class ListContracts
+{
+    private readonly IHttpClientFactory _httpFactory;
+    private readonly TableStorageService _table;
+    private readonly string _appId;
+
+    public ListContracts(IHttpClientFactory httpFactory, TableStorageService table, IConfiguration config)
+    {
+        _httpFactory = httpFactory;
+        _table       = table;
+        _appId       = config["APP_ID"] ?? "hqagents";
+    }
+
+    [Function("ListContracts")]
+    public async Task<HttpResponseData> Run(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "list-contracts")] HttpRequestData req,
+        FunctionContext context)
+    {
+        RoleGuard guard;
+        try { guard = await RoleGuard.CheckAsync(req, _httpFactory, _appId, Roles.User); }
+        catch { return await PlainResponse(req, HttpStatusCode.ServiceUnavailable, "Auth service unavailable"); }
+
+        if (!guard.Allowed)
+            return await PlainResponse(req, HttpStatusCode.Forbidden, "Forbidden");
+
+        var userId  = context.Items.TryGetValue("userId", out var uid) ? uid?.ToString() ?? "" : "";
+        var isAdmin = guard.RoleIds.Contains(Roles.Admin);
+
+        var entities = await _table.ListExtractionsAsync(isAdmin ? null : userId);
+
+        var items = entities.Select(e => new
+        {
+            correlationId = e.PartitionKey,
+            fileName      = e.FileName,
+            uploadedAt    = e.UploadedAt,
+            status        = e.Status,
+            documentType  = e.DocumentType,
+        });
+
+        var res = req.CreateResponse();
+        await res.WriteAsJsonAsync(items);
+        res.StatusCode = HttpStatusCode.OK;
+        return res;
+    }
+
+    private static async Task<HttpResponseData> PlainResponse(
+        HttpRequestData req, HttpStatusCode status, string message)
+    {
+        var res = req.CreateResponse();
+        await res.WriteStringAsync(message);
+        res.StatusCode = status;
+        return res;
+    }
+}

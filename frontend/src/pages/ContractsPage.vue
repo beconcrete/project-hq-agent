@@ -55,7 +55,6 @@
         ref="fileInput"
         type="file"
         accept=".pdf,.docx"
-        multiple
         hidden
         @change="onFileChange"
       />
@@ -65,11 +64,40 @@
     <div v-if="contracts.length > 0" class="contracts-grid">
       <div
         v-for="contract in contracts"
-        :key="contract.id"
+        :key="contract.correlationId"
         class="contract-card"
+        :class="{
+          'contract-card--clickable': isClickable(contract),
+          'contract-card--selected': selectedId === contract.correlationId,
+        }"
+        @click="onCardClick(contract)"
       >
         <div class="contract-card-icon">
           <svg
+            v-if="contract.status === 'processing'"
+            class="spin"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path
+              d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+            />
+          </svg>
+          <svg
+            v-else-if="contract.status === 'failed'"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <svg
+            v-else
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -81,16 +109,54 @@
             <polyline points="14 2 14 8 20 8" />
           </svg>
         </div>
+
         <div class="contract-card-body">
-          <div class="contract-card-name">{{ contract.name }}</div>
-          <div class="contract-card-meta">{{ contract.uploadedAt }}</div>
+          <div class="contract-card-name">
+            {{ contract.fileName || "Contract" }}
+          </div>
+          <div class="contract-card-meta">
+            <template v-if="contract.status === 'processing'"
+              >Extracting fields…</template
+            >
+            <template v-else-if="contract.status === 'failed'"
+              >Extraction failed</template
+            >
+            <template v-else
+              >{{ contract.documentType || "Document" }} ·
+              {{ formatDate(contract.uploadedAt) }}</template
+            >
+          </div>
         </div>
-        <span class="badge badge-processing">Processing</span>
+
+        <div class="contract-card-actions">
+          <span
+            v-if="contract.status === 'processing'"
+            class="badge badge-processing"
+            >Processing</span
+          >
+          <span
+            v-else-if="contract.status === 'pending_review'"
+            class="badge badge-warning"
+            >Pending review</span
+          >
+          <span
+            v-else-if="contract.status === 'failed'"
+            class="badge badge-error"
+            >Failed</span
+          >
+          <button
+            v-if="contract.status === 'failed'"
+            class="btn btn-ghost btn-sm"
+            @click.stop="dismissFailed(contract.correlationId)"
+          >
+            Dismiss
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Empty state -->
-    <div v-else class="contracts-empty">
+    <div v-else-if="!listLoading" class="contracts-empty">
       <svg
         class="contracts-empty-icon"
         viewBox="0 0 24 24"
@@ -110,11 +176,106 @@
         }}
       </p>
     </div>
+
+    <!-- Detail panel -->
+    <div
+      v-if="selectedContract"
+      class="contract-detail-overlay"
+      @click.self="selectedId = null"
+    >
+      <aside class="contract-detail-panel">
+        <div class="contract-detail-header">
+          <div>
+            <h2 class="contract-detail-title">
+              {{ selectedContract.documentType || selectedContract.fileName }}
+            </h2>
+            <p class="contract-detail-sub">
+              {{ selectedContract.fileName }} ·
+              {{ formatDate(selectedContract.uploadedAt) }}
+            </p>
+          </div>
+          <button
+            class="btn btn-ghost btn-icon"
+            @click="selectedId = null"
+            aria-label="Close"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div v-if="detailLoading" class="contract-detail-loading">Loading…</div>
+
+        <div v-else-if="detailError" class="upload-error">
+          <span class="upload-error-text">{{ detailError }}</span>
+        </div>
+
+        <div v-else-if="detailData" class="contract-detail-fields">
+          <div
+            v-if="detailData.status === 'pending_review'"
+            class="contract-detail-notice"
+          >
+            Flagged for human review — confidence below threshold.
+          </div>
+
+          <table class="fields-table">
+            <tbody>
+              <template
+                v-for="(value, key) in flatFields(detailData.fields)"
+                :key="key"
+              >
+                <tr>
+                  <th>{{ formatKey(key) }}</th>
+                  <td>
+                    <template v-if="Array.isArray(value)">
+                      <ul class="field-list">
+                        <li v-for="(item, i) in value" :key="i">{{ item }}</li>
+                      </ul>
+                    </template>
+                    <template
+                      v-else-if="
+                        value === null || value === undefined || value === ''
+                      "
+                    >
+                      <span class="field-not-found">Not found</span>
+                    </template>
+                    <template v-else>{{ value }}</template>
+                  </td>
+                </tr>
+              </template>
+              <tr
+                v-if="
+                  !detailData.fields ||
+                  Object.keys(detailData.fields).length === 0
+                "
+              >
+                <td colspan="2" class="field-not-found">
+                  No fields extracted.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="contract-detail-footer">
+          <button class="btn btn-primary" disabled title="Coming soon">
+            Ask a question
+          </button>
+        </div>
+      </aside>
+    </div>
   </section>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useAuth } from "../composables/useAuth";
 
 const auth = useAuth();
@@ -124,12 +285,138 @@ const isDragging = ref(false);
 const uploadState = ref("idle"); // 'idle' | 'uploading' | 'error'
 const uploadError = ref("");
 const contracts = ref([]);
+const listLoading = ref(true);
+const selectedId = ref(null);
+const detailData = ref(null);
+const detailLoading = ref(false);
+const detailError = ref("");
+
+const polls = new Map(); // correlationId → intervalId
+
+const selectedContract = computed(
+  () =>
+    contracts.value.find((c) => c.correlationId === selectedId.value) ?? null,
+);
 
 const MAX_SIZE = 20 * 1024 * 1024;
 const ALLOWED_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
+
+onMounted(loadContracts);
+onUnmounted(() => polls.forEach((id) => clearInterval(id)));
+
+async function loadContracts() {
+  listLoading.value = true;
+  try {
+    const res = await fetch("/api/list-contracts", {
+      headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      contracts.value = data;
+      data
+        .filter((c) => c.status === "processing")
+        .forEach((c) => startPolling(c.correlationId));
+    }
+  } catch {
+    /* silent — empty list shown */
+  } finally {
+    listLoading.value = false;
+  }
+}
+
+function startPolling(correlationId) {
+  if (polls.has(correlationId)) return;
+  const id = setInterval(() => pollStatus(correlationId), 3000);
+  polls.set(correlationId, id);
+}
+
+async function pollStatus(correlationId) {
+  try {
+    const res = await fetch(
+      `/api/check-status?correlationId=${correlationId}`,
+      {
+        headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
+      },
+    );
+    if (!res.ok) return;
+    const { status } = await res.json();
+    if (status === "processing") return;
+
+    clearInterval(polls.get(correlationId));
+    polls.delete(correlationId);
+
+    const idx = contracts.value.findIndex(
+      (c) => c.correlationId === correlationId,
+    );
+    if (idx !== -1) {
+      if (status === "completed" || status === "pending_review") {
+        const detail = await fetchDetail(correlationId);
+        if (detail) {
+          contracts.value[idx] = { ...contracts.value[idx], ...detail, status };
+        } else {
+          contracts.value[idx] = { ...contracts.value[idx], status };
+        }
+      } else {
+        contracts.value[idx] = { ...contracts.value[idx], status };
+      }
+    }
+  } catch {
+    /* retry next tick */
+  }
+}
+
+async function fetchDetail(correlationId) {
+  try {
+    const res = await fetch(
+      `/api/get-contract?correlationId=${correlationId}`,
+      {
+        headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
+      },
+    );
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+function isClickable(contract) {
+  return (
+    contract.status === "completed" || contract.status === "pending_review"
+  );
+}
+
+async function onCardClick(contract) {
+  if (!isClickable(contract)) return;
+  selectedId.value = contract.correlationId;
+  detailData.value = null;
+  detailError.value = "";
+  detailLoading.value = true;
+  try {
+    const data = await fetchDetail(contract.correlationId);
+    if (data) detailData.value = data;
+    else detailError.value = "Failed to load contract details.";
+  } catch {
+    detailError.value = "Failed to load contract details.";
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+watch(selectedId, (id) => {
+  if (!id) {
+    detailData.value = null;
+    detailError.value = "";
+  }
+});
+
+function dismissFailed(correlationId) {
+  contracts.value = contracts.value.filter(
+    (c) => c.correlationId !== correlationId,
+  );
+}
 
 function onDrop(e) {
   isDragging.value = false;
@@ -170,11 +457,14 @@ async function uploadFiles(files) {
         throw new Error(body.error || `Upload failed (${res.status})`);
       }
       const data = await res.json();
-      contracts.value.push({
-        id: data.id || crypto.randomUUID(),
-        name: file.name,
-        uploadedAt: new Date().toLocaleString(),
+      contracts.value.unshift({
+        correlationId: data.correlationId,
+        fileName: data.fileName,
+        uploadedAt: new Date().toISOString(),
+        status: "processing",
+        documentType: "",
       });
+      startPolling(data.correlationId);
     }
     uploadState.value = "idle";
   } catch (err) {
@@ -182,4 +472,162 @@ async function uploadFiles(files) {
     uploadState.value = "error";
   }
 }
+
+function formatDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatKey(key) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim();
+}
+
+function flatFields(fields) {
+  if (!fields || typeof fields !== "object") return {};
+  return fields;
+}
 </script>
+
+<style scoped>
+.contract-card--clickable {
+  cursor: pointer;
+}
+.contract-card--clickable:hover {
+  border-color: var(--color-accent, #6366f1);
+}
+.contract-card--selected {
+  border-color: var(--color-accent, #6366f1);
+}
+.contract-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1.2s linear infinite;
+}
+
+.badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+.badge-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Detail panel */
+.contract-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+}
+.contract-detail-panel {
+  width: min(480px, 100vw);
+  height: 100%;
+  background: var(--color-surface, #fff);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
+}
+.contract-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+.contract-detail-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+.contract-detail-sub {
+  font-size: 0.8rem;
+  color: var(--color-muted, #6b7280);
+  margin: 0;
+}
+.contract-detail-loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-muted, #6b7280);
+}
+.contract-detail-fields {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+}
+.contract-detail-notice {
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.contract-detail-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.fields-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--color-muted, #6b7280);
+  padding: 0.5rem 0;
+  width: 40%;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+.fields-table td {
+  padding: 0.5rem 0 0.5rem 0.75rem;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+.field-not-found {
+  color: var(--color-muted, #9ca3af);
+  font-style: italic;
+}
+.field-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.field-list li {
+  margin-bottom: 0.15rem;
+}
+
+.btn-icon {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+</style>
