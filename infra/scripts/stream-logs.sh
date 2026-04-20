@@ -17,13 +17,11 @@
 #   bash stream-logs.sh <correlationId>
 #
 # Expected sequence for a healthy upload:
-#   [ContractBlobTrigger]  "New contract uploaded: {correlationId}/{name} ({size} bytes)"
-#   [ContractBlobTrigger]  "Enqueued processing message for correlationId: {correlationId}"
-#   [ContractIngestion]    "ContractIngestion triggered for {correlationId}"
-#   [ContractWorkflow]     "Processing contract {correlationId} — {blobName}"
-#   [ContractWorkflow]     "PDF text extracted: {charCount} chars"
-#   [ContractWorkflow]     "Workflow complete for {correlationId}"
-#   [ContractIngestion]    "Contract {correlationId} stored — type:... pendingReview:... model:..."
+#   [ContractIngestion]         "ContractIngestion triggered for {correlationId}"
+#   [OpenAIContractWorkflow]    "Processing contract {correlationId} — {blobName}"
+#   [OpenAIContractWorkflow]    "PDF text extracted: {charCount} chars"
+#   [OpenAIContractWorkflow]    "Workflow complete for {correlationId}"
+#   [ContractIngestion]         "Contract {correlationId} stored — type:... pendingReview:... model:..."
 
 set -euo pipefail
 
@@ -57,20 +55,8 @@ while true; do
     --output json 2>/dev/null \
     | jq -r '.tables[0].rows[] | "\(.[0]) [\(.[3])] \(.[1])"' 2>/dev/null || true)
 
-  EXCEPTIONS=$(az monitor app-insights query \
-    --app "$APP_INSIGHTS" \
-    --resource-group "$RESOURCE_GROUP" \
-    --analytics-query "exceptions
-      | where timestamp > datetime('$LAST_TIMESTAMP')
-      $FILTER
-      | project timestamp, type, outerMessage, innermostMessage, cloud_RoleName
-      | order by timestamp asc" \
-    --output json 2>/dev/null \
-    | jq -r '.tables[0].rows[] | "\(.[0]) [EXCEPTION \(.[4])] \(.[1]): \(.[2]) | innermost: \(.[3])"' 2>/dev/null || true)
-
-  if [ -n "$TRACES" ] || [ -n "$EXCEPTIONS" ]; then
-    [ -n "$TRACES" ] && echo "$TRACES"
-    [ -n "$EXCEPTIONS" ] && echo "$EXCEPTIONS"
+  if [ -n "$TRACES" ]; then
+    echo "$TRACES"
     LAST_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   fi
 
