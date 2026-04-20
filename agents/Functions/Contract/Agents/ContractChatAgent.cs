@@ -14,162 +14,180 @@ namespace HqAgent.Agents.Contract.Agents;
 public class ContractChatAgent
 {
     private const string MiniModel        = "gpt-4.1-mini";
-    private const string FullModel        = "gpt-4.1";
     private const string ChatHistoryTable = "ContractChatHistory";
     private const int    MaxHistoryTurns  = 20;
 
-    private const string SystemPromptText = """
-        You are a contract analyst assistant. You have access to extracted contract fields and possibly the full contract document.
+    private const string SystemPromptBase = """
+        You are a contract analyst assistant with access to the user's contract database via tools.
 
-        Answer questions about this specific contract accurately and concisely.
-        Only use information present in the provided data. Never hallucinate clause text or dates.
-        If information is not available in the extracted fields, set needs_document to true.
+        Use list_contracts to find contracts or answer cross-contract questions (e.g. "which contracts expire next month").
+        Use get_contract to retrieve extracted fields for a specific contract.
+        Use get_contract_document only when extracted fields lack the detail needed to answer the question.
 
-        Always respond with valid JSON in exactly this format:
-        {
-          "answer": "your complete answer",
-          "confidence": 0.0,
-          "needs_document": false,
-          "sources": ["extracted_fields"]
-        }
-
-        confidence: 0.0–1.0 (how certain you are).
-        needs_document: true only when extracted fields lack the information needed.
-        sources: use "extracted_fields", "original_document", or both.
+        Answer accurately and concisely. Never hallucinate contract data, dates, parties, or clauses.
+        If you cannot find the answer in the available data, say so clearly.
         """;
 
-    private readonly ChatClient          _miniClient;
-    private readonly ChatClient          _fullClient;
+    private static readonly IReadOnlyList<ChatTool> Tools =
+    [
+        ChatTool.CreateFunctionTool(
+            "list_contracts",
+            "List all contracts accessible to the current user with metadata (type, filename, status, dates).",
+            BinaryData.FromString("""{"type":"object","properties":{},"required":[]}""")),
+        ChatTool.CreateFunctionTool(
+            "get_contract",
+            "Get the extracted fields for a specific contract by its correlation ID.",
+            BinaryData.FromString("""{"type":"object","properties":{"correlationId":{"type":"string","description":"The contract correlation ID"}},"required":["correlationId"]}""")),
+        ChatTool.CreateFunctionTool(
+            "get_contract_document",
+            "Get the full original document text for a contract. Use when extracted fields lack enough detail.",
+            BinaryData.FromString("""{"type":"object","properties":{"correlationId":{"type":"string","description":"The contract correlation ID"}},"required":["correlationId"]}""")),
+    ];
+
+    private readonly ChatClient          _chatClient;
     private readonly IHttpClientFactory  _httpFactory;
     private readonly string              _apiKey;
     private readonly TableServiceClient  _tableClient;
+    private readonly TableStorageService _tableStorage;
     private readonly BlobStorageService  _blobs;
     private readonly ILogger<ContractChatAgent> _logger;
 
     public ContractChatAgent(
         IHttpClientFactory         httpFactory,
         TableServiceClient         tableClient,
+        TableStorageService        tableStorage,
         BlobStorageService         blobs,
         IConfiguration             config,
         ILogger<ContractChatAgent> logger)
     {
-        _httpFactory = httpFactory;
-        _tableClient = tableClient;
-        _blobs       = blobs;
-        _logger      = logger;
-        _apiKey      = config["OPENAI_API_KEY"]
+        _httpFactory  = httpFactory;
+        _tableClient  = tableClient;
+        _tableStorage = tableStorage;
+        _blobs        = blobs;
+        _logger       = logger;
+        _apiKey       = config["OPENAI_API_KEY"]
             ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
 
-        var openAiClient = new OpenAIClient(_apiKey);
-        _miniClient = openAiClient.GetChatClient(MiniModel);
-        _fullClient = openAiClient.GetChatClient(FullModel);
+        _chatClient = new OpenAIClient(_apiKey).GetChatClient(MiniModel);
     }
 
     public async Task<ChatResult> ChatAsync(
-        ContractExtractionEntity entity,
+        string? contextCorrelationId,
         string sessionId,
         string message,
+        string userId,
+        bool isAdmin,
         CancellationToken ct)
     {
-        var history    = await LoadHistoryAsync(sessionId, ct);
-        var fieldsJson = string.IsNullOrEmpty(entity.Fields) ? "{}" : entity.Fields;
+        var history = await LoadHistoryAsync(sessionId, ct);
 
-        var messages    = BuildMessages(history, message, documentText: null);
-        var rawResponse = await CallOpenAIAsync(_miniClient, fieldsJson, messages, ct);
-        var parsed      = ParseResponse(rawResponse);
+        var systemPrompt = contextCorrelationId is not null
+            ? $"{SystemPromptBase}\nThe user is currently viewing contract ID: {contextCorrelationId}"
+            : SystemPromptBase;
 
-        var sources   = parsed.Sources;
-        var modelUsed = MiniModel;
-
-        if (parsed.NeedsDocument)
-        {
-            _logger.LogInformation("Fetching document for {CorrelationId}", entity.RowKey);
-            var docText  = await FetchDocumentTextAsync(entity, ct);
-            messages    = BuildMessages(history, message, docText);
-            var usesFull = parsed.Confidence < 0.5;
-            rawResponse = await CallOpenAIAsync(usesFull ? _fullClient : _miniClient, fieldsJson, messages, ct);
-            parsed      = ParseResponse(rawResponse);
-            sources     = parsed.Sources.Contains("extracted_fields")
-                ? ["extracted_fields", "original_document"]
-                : ["original_document"];
-            modelUsed   = usesFull ? FullModel : MiniModel;
-        }
-        else if (parsed.Confidence < 0.6)
-        {
-            _logger.LogInformation("Low confidence ({C:F2}) — escalating for {CorrelationId}", parsed.Confidence, entity.RowKey);
-            rawResponse = await CallOpenAIAsync(_fullClient, fieldsJson, messages, ct);
-            parsed      = ParseResponse(rawResponse);
-            modelUsed   = FullModel;
-        }
-
-        await SaveTurnAsync(sessionId, "user",      message,       ct);
-        await SaveTurnAsync(sessionId, "assistant", parsed.Answer, ct);
-
-        return new ChatResult(parsed.Answer, parsed.Confidence, modelUsed, sources);
-    }
-
-    // ── OpenAI ────────────────────────────────────────────────────────────────
-
-    private async Task<string> CallOpenAIAsync(
-        ChatClient client, string fieldsJson,
-        IList<ChatMessage> messages, CancellationToken ct)
-    {
-        var allMessages = new List<ChatMessage>
-        {
-            ChatMessage.CreateSystemMessage(
-                $"{SystemPromptText}\n\nExtracted contract fields:\n{fieldsJson}")
-        };
-        allMessages.AddRange(messages);
-
-        var options    = new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() };
-        var completion = await client.CompleteChatAsync(allMessages, options, ct);
-        return completion.Value.Content[0].Text;
-    }
-
-    private static List<ChatMessage> BuildMessages(
-        IReadOnlyList<ChatTurnEntity> history,
-        string userMessage,
-        string? documentText)
-    {
-        var list = new List<ChatMessage>();
+        var messages = new List<ChatMessage> { ChatMessage.CreateSystemMessage(systemPrompt) };
         foreach (var turn in history)
         {
-            list.Add(turn.Role == "user"
+            messages.Add(turn.Role == "user"
                 ? ChatMessage.CreateUserMessage(turn.Content)
                 : ChatMessage.CreateAssistantMessage(turn.Content));
         }
+        messages.Add(ChatMessage.CreateUserMessage(message));
 
-        var content = documentText is not null
-            ? $"Full contract text:\n{documentText}\n\nQuestion: {userMessage}"
-            : userMessage;
-        list.Add(ChatMessage.CreateUserMessage(content));
-        return list;
+        var options = new ChatCompletionOptions();
+        foreach (var tool in Tools) options.Tools.Add(tool);
+
+        string answer;
+        while (true)
+        {
+            var result     = await _chatClient.CompleteChatAsync(messages, options, ct);
+            var completion = result.Value;
+
+            if (completion.FinishReason == ChatFinishReason.ToolCalls)
+            {
+                messages.Add(new AssistantChatMessage(completion));
+                foreach (var call in completion.ToolCalls)
+                {
+                    var toolResult = await ExecuteToolAsync(call, userId, isAdmin, ct);
+                    _logger.LogInformation("Tool {Tool} called, result length: {Len}", call.FunctionName, toolResult.Length);
+                    messages.Add(new ToolChatMessage(call.Id, toolResult));
+                }
+            }
+            else
+            {
+                answer = completion.Content[0].Text;
+                break;
+            }
+        }
+
+        await SaveTurnAsync(sessionId, "user",      message, ct);
+        await SaveTurnAsync(sessionId, "assistant", answer,  ct);
+
+        return new ChatResult(answer, MiniModel);
     }
 
-    private static ChatResponseParsed ParseResponse(string raw)
+    // ── Tools ─────────────────────────────────────────────────────────────────
+
+    private async Task<string> ExecuteToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct) =>
+        call.FunctionName switch
+        {
+            "list_contracts"        => await ListContractsToolAsync(userId, isAdmin, ct),
+            "get_contract"          => await GetContractToolAsync(call, userId, isAdmin, ct),
+            "get_contract_document" => await GetContractDocumentToolAsync(call, userId, isAdmin, ct),
+            _                       => "Unknown tool",
+        };
+
+    private async Task<string> ListContractsToolAsync(
+        string userId, bool isAdmin, CancellationToken ct)
+    {
+        var contracts = await _tableStorage.ListExtractionsAsync(isAdmin ? null : userId, ct);
+        var summary = contracts.Select(e => new
+        {
+            correlationId = e.PartitionKey,
+            documentType  = e.DocumentType,
+            fileName      = e.FileName,
+            status        = e.Status,
+            uploadedAt    = e.UploadedAt,
+        });
+        return JsonSerializer.Serialize(summary);
+    }
+
+    private async Task<string> GetContractToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+    {
+        var correlationId = ParseArg(call.FunctionArguments, "correlationId");
+        if (correlationId is null) return "Missing correlationId argument";
+
+        var entity = await _tableStorage.GetExtractionAsync(correlationId, ct);
+        if (entity is null) return "Contract not found";
+        if (!isAdmin && entity.UserId != userId) return "Access denied";
+
+        return string.IsNullOrEmpty(entity.Fields) ? "{}" : entity.Fields;
+    }
+
+    private async Task<string> GetContractDocumentToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+    {
+        var correlationId = ParseArg(call.FunctionArguments, "correlationId");
+        if (correlationId is null) return "Missing correlationId argument";
+
+        var entity = await _tableStorage.GetExtractionAsync(correlationId, ct);
+        if (entity is null) return "Contract not found";
+        if (!isAdmin && entity.UserId != userId) return "Access denied";
+
+        var text = await FetchDocumentTextAsync(entity, ct);
+        return text ?? "Could not retrieve document";
+    }
+
+    private static string? ParseArg(BinaryData args, string key)
     {
         try
         {
-            var start = raw.IndexOf('{'); var end = raw.LastIndexOf('}');
-            var json  = start >= 0 && end > start ? raw[start..(end + 1)] : raw;
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            var answer     = root.TryGetProperty("answer",         out var a) ? a.GetString() ?? raw : raw;
-            var confidence = root.TryGetProperty("confidence",     out var c) ? c.GetDouble()        : 0.5;
-            var needsDoc   = root.TryGetProperty("needs_document", out var n) && n.GetBoolean();
-            var sources    = new List<string> { "extracted_fields" };
-
-            if (root.TryGetProperty("sources", out var s) && s.ValueKind == JsonValueKind.Array)
-            {
-                sources.Clear();
-                foreach (var el in s.EnumerateArray())
-                    if (el.GetString() is { } src) sources.Add(src);
-            }
-
-            return new ChatResponseParsed(answer, confidence, needsDoc, sources);
+            using var doc = JsonDocument.Parse(args);
+            return doc.RootElement.TryGetProperty(key, out var val) ? val.GetString() : null;
         }
-        catch { return new ChatResponseParsed(raw, 0.5, false, ["extracted_fields"]); }
+        catch { return null; }
     }
 
     // ── Document fetch ────────────────────────────────────────────────────────
@@ -278,11 +296,6 @@ public class ContractChatAgent
             Content      = content,
         }, TableUpdateMode.Replace, ct);
     }
-
-    // ── Private types ─────────────────────────────────────────────────────────
-
-    private record ChatResponseParsed(
-        string Answer, double Confidence, bool NeedsDocument, List<string> Sources);
 }
 
-public record ChatResult(string Answer, double Confidence, string ModelUsed, List<string> Sources);
+public record ChatResult(string Answer, string ModelUsed);

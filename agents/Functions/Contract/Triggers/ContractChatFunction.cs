@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json.Serialization;
 using HqAgent.Agents.Contract.Agents;
-using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 
@@ -15,14 +14,9 @@ namespace HqAgent.Agents.Contract.Triggers;
 /// </summary>
 public class ContractChatFunction
 {
-    private readonly ContractChatAgent  _agent;
-    private readonly TableStorageService _table;
+    private readonly ContractChatAgent _agent;
 
-    public ContractChatFunction(ContractChatAgent agent, TableStorageService table)
-    {
-        _agent = agent;
-        _table = table;
-    }
+    public ContractChatFunction(ContractChatAgent agent) => _agent = agent;
 
     [Function("ContractChat")]
     public async Task<HttpResponseData> Run(
@@ -36,23 +30,17 @@ public class ContractChatFunction
         try { body = await System.Text.Json.JsonSerializer.DeserializeAsync<ChatRequest>(req.Body); }
         catch { return await Plain(req, HttpStatusCode.BadRequest, "Invalid JSON body"); }
 
-        if (body is null || string.IsNullOrWhiteSpace(body.CorrelationId)
+        if (body is null
             || string.IsNullOrWhiteSpace(body.SessionId)
             || string.IsNullOrWhiteSpace(body.Message))
-            return await Plain(req, HttpStatusCode.BadRequest, "correlationId, sessionId and message are required");
+            return await Plain(req, HttpStatusCode.BadRequest, "sessionId and message are required");
 
-        var entity = await _table.GetExtractionAsync(body.CorrelationId);
-        if (entity is null)
-            return await Plain(req, HttpStatusCode.NotFound, "Contract not found");
-        if (!isAdmin && entity.UserId != userId)
-            return await Plain(req, HttpStatusCode.Forbidden, "Forbidden");
-        if (entity.Status is not ("completed" or "pending_review"))
-            return await Plain(req, HttpStatusCode.Conflict, "Contract is not yet processed");
-
-        var result = await _agent.ChatAsync(entity, body.SessionId, body.Message, context.CancellationToken);
+        var result = await _agent.ChatAsync(
+            body.CorrelationId, body.SessionId, body.Message, userId, isAdmin,
+            context.CancellationToken);
 
         var res = req.CreateResponse();
-        await res.WriteAsJsonAsync(new { answer = result.Answer, sources = result.Sources, modelUsed = result.ModelUsed, confidence = result.Confidence });
+        await res.WriteAsJsonAsync(new { answer = result.Answer, modelUsed = result.ModelUsed });
         res.StatusCode = HttpStatusCode.OK;
         return res;
     }
@@ -67,7 +55,7 @@ public class ContractChatFunction
     }
 
     private record ChatRequest(
-        [property: JsonPropertyName("correlationId")] string CorrelationId,
-        [property: JsonPropertyName("sessionId")]     string SessionId,
-        [property: JsonPropertyName("message")]       string Message);
+        [property: JsonPropertyName("correlationId")] string? CorrelationId,
+        [property: JsonPropertyName("sessionId")]     string  SessionId,
+        [property: JsonPropertyName("message")]       string  Message);
 }
