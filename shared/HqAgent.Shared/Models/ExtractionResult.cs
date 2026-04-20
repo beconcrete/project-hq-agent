@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace HqAgent.Shared.Models;
 
@@ -8,10 +9,10 @@ namespace HqAgent.Shared.Models;
 /// for the specific document type rather than filling a predetermined schema.
 /// </summary>
 public record ExtractionResult(
-    string                            DocumentType,
-    double                            TriageConfidence,
-    Dictionary<string, JsonElement>?  ExtractedFields,
-    double                            ExtractionConfidence,
-    string                            ModelUsed,
-    bool                              PendingReview
+    [property: JsonPropertyName("documentType")]         string                            DocumentType,
+    [property: JsonPropertyName("triageConfidence")]     double                            TriageConfidence,
+    [property: JsonPropertyName("extractedFields")]      Dictionary<string, JsonElement>?  ExtractedFields,
+    [property: JsonPropertyName("extractionConfidence")] double                            ExtractionConfidence,
+    [property: JsonPropertyName("modelUsed")]            string                            ModelUsed,
+    [property: JsonPropertyName("pendingReview")]        bool                              PendingReview
 );
