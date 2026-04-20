@@ -1,288 +1,26 @@
 <template>
-  <section class="contracts-module">
-    <div class="module-header">
-      <h1>Contracts</h1>
-      <p class="module-subtitle">
-        Upload, extract, and query your contracts with AI assistance.
-      </p>
-    </div>
-
-    <!-- Upload area — admin only -->
-    <div v-if="auth.hasRole('admin')" class="upload-area">
-      <div
-        class="dropzone-full"
-        :class="{ 'drag-active': isDragging }"
-        @click="fileInput?.click()"
-        @dragover.prevent="isDragging = true"
-        @dragleave.prevent="isDragging = false"
-        @drop.prevent="onDrop"
-      >
-        <svg
-          class="dropzone-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
+  <section class="contracts-page">
+    <!-- ── Chat Zone (full width, center stage) ─────────────────────────── -->
+    <div class="chat-zone">
+      <div class="chat-header">
+        <div class="chat-header-text">
+          <h2 class="chat-heading">Contract Assistant</h2>
+          <span class="chat-subheading"
+            >Ask questions across all your contracts</span
+          >
+        </div>
+        <button
+          v-if="chatMessages.length"
+          class="btn-new-chat"
+          @click="clearChat"
         >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-        <div class="dropzone-heading">Drop your contract here</div>
-        <p class="dropzone-subtext">or click to browse your files</p>
-        <div class="dropzone-types">
-          <span class="dropzone-badge">PDF</span>
-          <span class="dropzone-badge">DOCX</span>
-          <span class="dropzone-badge">Max 20 MB</span>
-        </div>
-      </div>
-
-      <div v-if="uploadState === 'uploading'" class="upload-progress">
-        <div class="upload-progress-bar">
-          <div class="upload-progress-fill" />
-        </div>
-        <span class="upload-progress-label">Uploading…</span>
-      </div>
-      <div v-if="uploadState === 'error'" class="upload-error">
-        <span class="upload-error-text">{{ uploadError }}</span>
-        <button class="btn btn-ghost btn-sm" @click="uploadState = 'idle'">
-          Try again
+          New conversation
         </button>
       </div>
-      <input
-        ref="fileInput"
-        type="file"
-        accept=".pdf,.docx"
-        hidden
-        @change="onFileChange"
-      />
-    </div>
 
-    <!-- Three-column workspace -->
-    <div class="contracts-workspace">
-      <!-- ── Column 1: Contract list ──────────────────────────────────────── -->
-      <div class="col-list">
-        <div v-if="contracts.length > 0">
-          <div v-for="contract in contracts" :key="contract.correlationId">
-            <div
-              class="contract-card"
-              :class="{
-                'contract-card--clickable': isClickable(contract),
-                'contract-card--selected':
-                  selectedId === contract.correlationId,
-              }"
-              @click="onCardClick(contract)"
-            >
-              <div class="contract-card-icon">
-                <svg
-                  v-if="contract.status === 'processing'"
-                  class="spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
-                  <path
-                    d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-                  />
-                </svg>
-                <svg
-                  v-else-if="contract.status === 'failed'"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                <svg
-                  v-else
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                >
-                  <path
-                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                  />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-              </div>
-              <div class="contract-card-body">
-                <div class="contract-card-name">
-                  {{ contract.fileName || "Contract" }}
-                </div>
-                <div class="contract-card-meta">
-                  <template v-if="contract.status === 'processing'"
-                    >Extracting fields…</template
-                  >
-                  <template v-else-if="contract.status === 'failed'"
-                    >Extraction failed</template
-                  >
-                  <template v-else
-                    >{{ contract.documentType || "Document" }} ·
-                    {{ formatDate(contract.uploadedAt) }}</template
-                  >
-                </div>
-              </div>
-              <div class="contract-card-actions">
-                <span
-                  v-if="contract.status === 'processing'"
-                  class="badge badge-processing"
-                  >Processing</span
-                >
-                <span
-                  v-else-if="contract.status === 'pending_review'"
-                  class="badge badge-warning"
-                  >Pending review</span
-                >
-                <span
-                  v-else-if="contract.status === 'failed'"
-                  class="badge badge-error"
-                  >Failed</span
-                >
-                <button
-                  v-if="contract.status === 'failed'"
-                  class="btn btn-ghost btn-sm"
-                  @click.stop="dismissFailed(contract.correlationId)"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-
-            <!-- Mobile accordion: detail panel expands inline below selected card -->
-            <div
-              v-if="selectedId === contract.correlationId"
-              class="detail-accordion"
-            >
-              <div class="detail-panel-header">
-                <div>
-                  <h2 class="detail-panel-title">
-                    {{
-                      detailData?.documentType || detailData?.fileName || "—"
-                    }}
-                  </h2>
-                  <p class="detail-panel-sub">
-                    {{ detailData?.fileName }} ·
-                    {{ formatDate(detailData?.uploadedAt) }}
-                  </p>
-                </div>
-                <button
-                  class="btn btn-ghost btn-icon"
-                  @click="selectedId = null"
-                  aria-label="Close"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div v-if="detailLoading" class="detail-loading">Loading…</div>
-              <div v-else-if="detailError" class="upload-error">
-                <span class="upload-error-text">{{ detailError }}</span>
-              </div>
-              <div v-else-if="detailData" class="detail-fields">
-                <div
-                  v-if="detailData.status === 'pending_review'"
-                  class="detail-notice"
-                >
-                  Flagged for human review — confidence below threshold.
-                </div>
-                <table class="fields-table">
-                  <tbody>
-                    <template
-                      v-for="(value, key) in flatFields(detailData.fields)"
-                      :key="key"
-                    >
-                      <tr>
-                        <th>{{ formatKey(key) }}</th>
-                        <td>
-                          <template
-                            v-if="
-                              Array.isArray(value) &&
-                              value.length &&
-                              isObject(value[0])
-                            "
-                            ><div class="object-cards">
-                              <div
-                                v-for="(item, i) in value"
-                                :key="i"
-                                class="object-card"
-                              >
-                                <div v-if="item.name" class="object-card-name">
-                                  {{ item.name }}
-                                </div>
-                                <dl class="object-card-props">
-                                  <template v-for="(v, k) in item" :key="k"
-                                    ><div
-                                      v-if="k !== 'name'"
-                                      class="object-card-prop"
-                                    >
-                                      <dt>{{ formatKey(k) }}</dt>
-                                      <dd>{{ v ?? "—" }}</dd>
-                                    </div></template
-                                  >
-                                </dl>
-                              </div>
-                            </div></template
-                          ><template
-                            v-else-if="Array.isArray(value) && value.length"
-                            ><ul class="field-list">
-                              <li v-for="(item, i) in value" :key="i">
-                                {{ item }}
-                              </li>
-                            </ul></template
-                          ><template v-else-if="Array.isArray(value)"
-                            ><span class="field-not-found">None</span></template
-                          ><template
-                            v-else-if="
-                              value === null ||
-                              value === undefined ||
-                              value === ''
-                            "
-                            ><span class="field-not-found"
-                              >Not found</span
-                            ></template
-                          ><template v-else-if="typeof value === 'boolean'"
-                            ><span
-                              :class="
-                                value ? 'field-bool-yes' : 'field-bool-no'
-                              "
-                              >{{ value ? "Yes" : "No" }}</span
-                            ></template
-                          ><template v-else>{{ value }}</template>
-                        </td>
-                      </tr>
-                    </template>
-                    <tr
-                      v-if="
-                        !detailData.fields ||
-                        Object.keys(detailData.fields).length === 0
-                      "
-                    >
-                      <td colspan="2" class="field-not-found">
-                        No fields extracted.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else-if="!listLoading" class="contracts-empty">
+      <div v-if="selectedContract" class="chat-context">
+        <div class="chat-context-inner">
           <svg
-            class="contracts-empty-icon"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -293,19 +31,326 @@
             />
             <polyline points="14 2 14 8 20 8" />
           </svg>
-          <p class="contracts-empty-title">No contracts yet</p>
-          <p class="contracts-empty-text">
-            {{
-              auth.hasRole("admin")
-                ? "Upload a contract above to get started."
-                : "No contracts have been uploaded yet."
-            }}
-          </p>
+          <span class="chat-context-name">{{
+            selectedContract.documentType || selectedContract.fileName
+          }}</span>
+          <span class="chat-context-label">selected</span>
+        </div>
+        <button
+          class="chat-context-dismiss"
+          @click="selectedId = null"
+          aria-label="Clear context"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <div ref="chatScroll" class="chat-messages">
+        <div v-if="!chatMessages.length && !chatPending" class="chat-empty">
+          <div class="chat-suggestions">
+            <span class="suggestion-pill"
+              >Which contracts expire next month?</span
+            >
+            <span class="suggestion-pill">Summarize the NDA with Acme</span>
+            <span class="suggestion-pill">What are the payment terms?</span>
+          </div>
+        </div>
+
+        <div
+          v-for="msg in chatMessages"
+          :key="msg.id"
+          :class="[
+            'chat-msg',
+            msg.role === 'user' ? 'chat-msg--user' : 'chat-msg--ai',
+          ]"
+        >
+          <div :class="['chat-bubble', msg.error && 'chat-bubble--error']">
+            {{ msg.content }}
+          </div>
+          <span
+            v-if="msg.role === 'assistant' && !msg.error && msg.model"
+            class="msg-model"
+            >{{ msg.model }}</span
+          >
+        </div>
+
+        <div v-if="chatPending" class="chat-msg chat-msg--ai">
+          <div class="chat-bubble typing-dots"><span /><span /><span /></div>
         </div>
       </div>
 
-      <!-- ── Column 2: Detail panel (desktop sidebar) ─────────────────────── -->
-      <aside class="col-detail">
+      <form class="chat-compose" @submit.prevent="sendMessage">
+        <input
+          v-model="chatInput"
+          type="text"
+          :placeholder="
+            selectedContract
+              ? 'Ask about this contract or all contracts…'
+              : 'Ask about your contracts…'
+          "
+          :disabled="chatPending"
+          class="compose-input"
+          @keydown.enter.prevent="sendMessage"
+        />
+        <button
+          type="submit"
+          :disabled="!chatInput.trim() || chatPending"
+          class="compose-send"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </form>
+    </div>
+
+    <!-- ── Workspace: Accordions left + Detail right ─────────────────────── -->
+    <div class="workspace">
+      <!-- Left column: accordions -->
+      <div class="workspace-left">
+        <!-- Existing Contracts accordion -->
+        <div class="accordion" :class="{ open: contractsOpen }">
+          <button
+            class="accordion-trigger"
+            @click="contractsOpen = !contractsOpen"
+          >
+            <span class="accordion-label">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path
+                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              Existing Contracts
+              <span v-if="contracts.length" class="badge-count">{{
+                contracts.length
+              }}</span>
+            </span>
+            <svg
+              class="chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div class="accordion-panel">
+            <div class="accordion-panel-inner">
+              <div v-if="listLoading" class="panel-state">Loading…</div>
+              <div
+                v-else-if="contracts.length === 0"
+                class="panel-state panel-state--empty"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                No contracts yet
+              </div>
+              <div v-else class="contract-list">
+                <div
+                  v-for="contract in contracts"
+                  :key="contract.correlationId"
+                  class="contract-row"
+                  :class="{
+                    'contract-row--clickable': isClickable(contract),
+                    'contract-row--selected':
+                      selectedId === contract.correlationId,
+                  }"
+                  @click="onCardClick(contract)"
+                >
+                  <div class="contract-row-icon">
+                    <svg
+                      v-if="contract.status === 'processing'"
+                      class="spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    >
+                      <path
+                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+                      />
+                    </svg>
+                    <svg
+                      v-else-if="contract.status === 'failed'"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <svg
+                      v-else
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                    >
+                      <path
+                        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                      />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </div>
+                  <div class="contract-row-body">
+                    <div class="contract-row-name">
+                      {{ contract.fileName || "Contract" }}
+                    </div>
+                    <div class="contract-row-meta">
+                      <template v-if="contract.status === 'processing'"
+                        >Extracting fields…</template
+                      >
+                      <template v-else-if="contract.status === 'failed'"
+                        >Extraction failed</template
+                      >
+                      <template v-else
+                        >{{ contract.documentType || "Document" }} ·
+                        {{ formatDate(contract.uploadedAt) }}</template
+                      >
+                    </div>
+                  </div>
+                  <div class="contract-row-end">
+                    <span
+                      v-if="contract.status === 'processing'"
+                      class="badge badge--blue"
+                      >Processing</span
+                    >
+                    <span
+                      v-else-if="contract.status === 'pending_review'"
+                      class="badge badge--amber"
+                      >Review</span
+                    >
+                    <span
+                      v-else-if="contract.status === 'failed'"
+                      class="badge badge--red"
+                      >Failed</span
+                    >
+                    <button
+                      v-if="contract.status === 'failed'"
+                      class="btn-ghost-sm"
+                      @click.stop="dismissFailed(contract.correlationId)"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload New accordion (admin only) -->
+        <div
+          v-if="auth.hasRole('admin')"
+          class="accordion"
+          :class="{ open: uploadOpen }"
+        >
+          <button class="accordion-trigger" @click="uploadOpen = !uploadOpen">
+            <span class="accordion-label">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Upload New
+            </span>
+            <svg
+              class="chevron"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <div class="accordion-panel">
+            <div class="accordion-panel-inner">
+              <div
+                class="dropzone"
+                :class="{ 'dropzone--over': isDragging }"
+                @click="fileInput?.click()"
+                @dragover.prevent="isDragging = true"
+                @dragleave.prevent="isDragging = false"
+                @drop.prevent="onDrop"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <p class="dropzone-title">Drop contract here</p>
+                <p class="dropzone-hint">or click to browse</p>
+                <div class="dropzone-tags">
+                  <span>PDF</span><span>DOCX</span><span>Max 20 MB</span>
+                </div>
+              </div>
+              <div v-if="uploadState === 'uploading'" class="upload-status">
+                <div class="upload-bar"><div class="upload-fill" /></div>
+                <span>Uploading…</span>
+              </div>
+              <div v-if="uploadState === 'error'" class="upload-err">
+                <span>{{ uploadError }}</span>
+                <button class="btn-ghost-sm" @click="uploadState = 'idle'">
+                  Try again
+                </button>
+              </div>
+              <input
+                ref="fileInput"
+                type="file"
+                accept=".pdf,.docx"
+                hidden
+                @change="onFileChange"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: detail panel -->
+      <aside class="workspace-right">
         <div v-if="!selectedId" class="detail-empty">
           <svg
             viewBox="0 0 24 24"
@@ -317,22 +362,25 @@
               d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
             />
             <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
           </svg>
-          <p>Select a contract to view details</p>
+          <p>Select a contract to view its extracted fields</p>
         </div>
         <template v-else>
-          <div class="detail-panel-header">
-            <div>
-              <h2 class="detail-panel-title">
+          <div class="detail-top">
+            <div class="detail-top-text">
+              <h3 class="detail-doc-type">
                 {{ detailData?.documentType || detailData?.fileName || "—" }}
-              </h2>
-              <p class="detail-panel-sub">
+              </h3>
+              <p class="detail-doc-meta">
                 {{ detailData?.fileName }} ·
                 {{ formatDate(detailData?.uploadedAt) }}
               </p>
             </div>
             <button
-              class="btn btn-ghost btn-icon"
+              class="btn-icon"
               @click="selectedId = null"
               aria-label="Close"
             >
@@ -347,184 +395,97 @@
               </svg>
             </button>
           </div>
-          <div v-if="detailLoading" class="detail-loading">Loading…</div>
-          <div v-else-if="detailError" class="upload-error">
-            <span class="upload-error-text">{{ detailError }}</span>
-          </div>
-          <div v-else-if="detailData" class="detail-fields">
-            <div
-              v-if="detailData.status === 'pending_review'"
-              class="detail-notice"
-            >
-              Flagged for human review — confidence below threshold.
+          <div class="detail-scroll">
+            <div v-if="detailLoading" class="detail-loading">Loading…</div>
+            <div v-else-if="detailError" class="detail-error-msg">
+              {{ detailError }}
             </div>
-            <table class="fields-table">
-              <tbody>
-                <template
-                  v-for="(value, key) in flatFields(detailData.fields)"
-                  :key="key"
-                >
-                  <tr>
-                    <th>{{ formatKey(key) }}</th>
-                    <td>
-                      <template
-                        v-if="
-                          Array.isArray(value) &&
-                          value.length &&
-                          isObject(value[0])
-                        "
-                        ><div class="object-cards">
-                          <div
-                            v-for="(item, i) in value"
-                            :key="i"
-                            class="object-card"
-                          >
-                            <div v-if="item.name" class="object-card-name">
-                              {{ item.name }}
+            <div v-else-if="detailData">
+              <div
+                v-if="detailData.status === 'pending_review'"
+                class="detail-notice"
+              >
+                Flagged for human review — confidence below threshold.
+              </div>
+              <table class="fields-table">
+                <tbody>
+                  <template
+                    v-for="(value, key) in flatFields(detailData.fields)"
+                    :key="key"
+                  >
+                    <tr>
+                      <th>{{ formatKey(key) }}</th>
+                      <td>
+                        <template
+                          v-if="
+                            Array.isArray(value) &&
+                            value.length &&
+                            isObject(value[0])
+                          "
+                        >
+                          <div class="obj-cards">
+                            <div
+                              v-for="(item, i) in value"
+                              :key="i"
+                              class="obj-card"
+                            >
+                              <div v-if="item.name" class="obj-card-name">
+                                {{ item.name }}
+                              </div>
+                              <dl class="obj-card-dl">
+                                <template v-for="(v, k) in item" :key="k">
+                                  <div v-if="k !== 'name'" class="obj-card-row">
+                                    <dt>{{ formatKey(k) }}</dt>
+                                    <dd>{{ v ?? "—" }}</dd>
+                                  </div>
+                                </template>
+                              </dl>
                             </div>
-                            <dl class="object-card-props">
-                              <template v-for="(v, k) in item" :key="k"
-                                ><div
-                                  v-if="k !== 'name'"
-                                  class="object-card-prop"
-                                >
-                                  <dt>{{ formatKey(k) }}</dt>
-                                  <dd>{{ v ?? "—" }}</dd>
-                                </div></template
-                              >
-                            </dl>
                           </div>
-                        </div></template
-                      ><template
-                        v-else-if="Array.isArray(value) && value.length"
-                        ><ul class="field-list">
-                          <li v-for="(item, i) in value" :key="i">
-                            {{ item }}
-                          </li>
-                        </ul></template
-                      ><template v-else-if="Array.isArray(value)"
-                        ><span class="field-not-found">None</span></template
-                      ><template
-                        v-else-if="
-                          value === null || value === undefined || value === ''
-                        "
-                        ><span class="field-not-found"
-                          >Not found</span
-                        ></template
-                      ><template v-else-if="typeof value === 'boolean'"
-                        ><span
-                          :class="value ? 'field-bool-yes' : 'field-bool-no'"
-                          >{{ value ? "Yes" : "No" }}</span
-                        ></template
-                      ><template v-else>{{ value }}</template>
-                    </td>
+                        </template>
+                        <template
+                          v-else-if="Array.isArray(value) && value.length"
+                        >
+                          <ul class="field-list">
+                            <li v-for="(item, i) in value" :key="i">
+                              {{ item }}
+                            </li>
+                          </ul>
+                        </template>
+                        <template v-else-if="Array.isArray(value)"
+                          ><span class="val-nil">None</span></template
+                        >
+                        <template
+                          v-else-if="
+                            value === null ||
+                            value === undefined ||
+                            value === ''
+                          "
+                          ><span class="val-nil">Not found</span></template
+                        >
+                        <template v-else-if="typeof value === 'boolean'">
+                          <span :class="value ? 'val-yes' : 'val-no'">{{
+                            value ? "Yes" : "No"
+                          }}</span>
+                        </template>
+                        <template v-else>{{ value }}</template>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr
+                    v-if="
+                      !detailData.fields ||
+                      Object.keys(detailData.fields).length === 0
+                    "
+                  >
+                    <td colspan="2" class="val-nil">No fields extracted.</td>
                   </tr>
-                </template>
-                <tr
-                  v-if="
-                    !detailData.fields ||
-                    Object.keys(detailData.fields).length === 0
-                  "
-                >
-                  <td colspan="2" class="field-not-found">
-                    No fields extracted.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         </template>
       </aside>
-
-      <!-- ── Column 3: Chat (always visible) ─────────────────────────────── -->
-      <div class="col-chat">
-        <div class="chat-header">
-          <span class="chat-title">Contract assistant</span>
-          <button
-            v-if="chatMessages.length"
-            class="btn btn-ghost btn-sm"
-            @click="clearChat"
-          >
-            New conversation
-          </button>
-        </div>
-
-        <div v-if="selectedContract" class="chat-context">
-          <span class="chat-context-label">Asking about:</span>
-          <span class="chat-context-name">{{
-            selectedContract.documentType || selectedContract.fileName
-          }}</span>
-          <button
-            class="chat-context-clear"
-            @click="selectedId = null"
-            aria-label="Clear context"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <div ref="chatScroll" class="chat-messages">
-          <p v-if="!chatMessages.length && !chatPending" class="chat-empty">
-            Ask anything — "which contracts expire next month", "summarise the
-            NDA with Acme"…
-          </p>
-
-          <div
-            v-for="msg in chatMessages"
-            :key="msg.id"
-            :class="[
-              'chat-message',
-              msg.role === 'user'
-                ? 'chat-message--user'
-                : 'chat-message--assistant',
-            ]"
-          >
-            <div :class="['chat-bubble', msg.error && 'chat-bubble--error']">
-              {{ msg.content }}
-            </div>
-            <div
-              v-if="msg.role === 'assistant' && !msg.error && msg.model"
-              class="chat-badges"
-            >
-              <span class="chat-badge">{{ msg.model }}</span>
-            </div>
-          </div>
-
-          <div v-if="chatPending" class="chat-message chat-message--assistant">
-            <div class="chat-bubble chat-typing"><span /><span /><span /></div>
-          </div>
-        </div>
-
-        <form class="chat-input-row" @submit.prevent="sendMessage">
-          <input
-            v-model="chatInput"
-            type="text"
-            :placeholder="
-              selectedContract
-                ? 'Ask about this contract or all contracts…'
-                : 'Ask about your contracts…'
-            "
-            :disabled="chatPending"
-            class="chat-input"
-            @keydown.enter.prevent="sendMessage"
-          />
-          <button
-            type="submit"
-            :disabled="!chatInput.trim() || chatPending"
-            class="btn btn-primary btn-sm"
-          >
-            Send
-          </button>
-        </form>
-      </div>
     </div>
   </section>
 </template>
@@ -549,6 +510,10 @@ const detailData = ref(null);
 const detailLoading = ref(false);
 const detailError = ref("");
 const polls = new Map();
+
+// ── Accordion state ────────────────────────────────────────────────────────────
+const contractsOpen = ref(true);
+const uploadOpen = ref(true);
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 const sessionId = ref(crypto.randomUUID());
@@ -824,380 +789,220 @@ function isObject(val) {
 </script>
 
 <style scoped>
-/* ── Layout ──────────────────────────────────────────────────────────────────── */
-.contracts-module {
+/* ── Page ─────────────────────────────────────────────────────────────────── */
+.contracts-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  gap: 1.25rem;
+  padding-bottom: 2rem;
 }
 
-.upload-area {
-  padding-bottom: 1rem;
-}
-
-.contracts-workspace {
-  display: grid;
-  grid-template-columns: 280px 360px 1fr;
-  flex: 1;
-  min-height: 0;
-  height: 72vh;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 8px;
+/* ── Chat Zone ────────────────────────────────────────────────────────────── */
+.chat-zone {
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  background: linear-gradient(150deg, #f8f9ff 0%, #f2f4ff 100%);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow:
+    0 2px 12px rgba(79, 70, 229, 0.07),
+    0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.col-list,
-.col-detail,
-.col-chat {
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.col-list {
-  border-right: 1px solid var(--color-border, #e5e7eb);
-  padding: 0.5rem;
-}
-
-.col-detail {
-  border-right: 1px solid var(--color-border, #e5e7eb);
-  overflow-y: auto;
-}
-
-.col-chat {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ── Mobile: stack, hide desktop sidebar, show accordion ─────────────────────── */
-@media (max-width: 767px) {
-  .contracts-workspace {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    border: none;
-    border-radius: 0;
-    overflow: visible;
-  }
-  .col-list {
-    border-right: none;
-    overflow-y: visible;
-  }
-  .col-detail {
-    display: none;
-  }
-  .col-chat {
-    border-top: 1px solid var(--color-border, #e5e7eb);
-    min-height: 420px;
-    overflow: hidden;
-  }
-}
-
-/* Desktop: hide mobile accordion */
-@media (min-width: 768px) {
-  .detail-accordion {
-    display: none;
-  }
-}
-
-/* ── Detail panel (shared styles for both accordion + sidebar) ───────────────── */
-.detail-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 0.75rem;
-  color: var(--color-muted, #9ca3af);
-  font-size: 0.875rem;
-  padding: 2rem;
-  text-align: center;
-}
-.detail-empty svg {
-  width: 2.5rem;
-  height: 2.5rem;
-  opacity: 0.35;
-}
-
-.detail-accordion {
-  border-top: 1px solid var(--color-border, #e5e7eb);
-  margin-bottom: 0.5rem;
-  background: var(--color-surface, #fff);
-}
-
-.detail-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
-  position: sticky;
-  top: 0;
-  background: var(--color-surface, #fff);
-  z-index: 1;
-}
-.detail-panel-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 0.2rem;
-}
-.detail-panel-sub {
-  font-size: 0.78rem;
-  color: var(--color-muted, #6b7280);
-  margin: 0;
-}
-
-.detail-loading {
-  padding: 2rem;
-  text-align: center;
-  color: var(--color-muted, #6b7280);
-}
-.detail-fields {
-  padding: 1rem 1.25rem;
-}
-.detail-notice {
-  background: #fef3c7;
-  color: #92400e;
-  border-radius: 6px;
-  padding: 0.65rem 0.9rem;
-  margin-bottom: 1rem;
-  font-size: 0.82rem;
-}
-
-/* ── Fields table ────────────────────────────────────────────────────────────── */
-.fields-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-.fields-table th {
-  text-align: left;
-  font-weight: 500;
-  color: var(--color-muted, #6b7280);
-  padding: 0.45rem 0;
-  width: 40%;
-  vertical-align: top;
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
-}
-.fields-table td {
-  padding: 0.45rem 0 0.45rem 0.75rem;
-  vertical-align: top;
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
-}
-.field-not-found {
-  color: var(--color-muted, #9ca3af);
-  font-style: italic;
-}
-.field-bool-yes {
-  color: #15803d;
-  font-weight: 500;
-}
-.field-bool-no {
-  color: var(--color-muted, #6b7280);
-}
-.field-list {
-  margin: 0;
-  padding-left: 1.25rem;
-}
-.field-list li {
-  margin-bottom: 0.2rem;
-}
-.object-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.2rem 0;
-}
-.object-card {
-  background: var(--color-bg, #f9fafb);
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 6px;
-  padding: 0.5rem 0.65rem;
-}
-.object-card-name {
-  font-weight: 600;
-  font-size: 0.83rem;
-  margin-bottom: 0.3rem;
-}
-.object-card-props {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.75rem;
-  margin: 0;
-}
-.object-card-prop {
-  display: flex;
-  align-items: baseline;
-  gap: 0.25rem;
-  font-size: 0.78rem;
-}
-.object-card-prop dt {
-  color: var(--color-muted, #6b7280);
-  font-weight: 500;
-  white-space: nowrap;
-}
-.object-card-prop dt::after {
-  content: ":";
-}
-.object-card-prop dd {
-  margin: 0;
-  color: var(--color-text, #374151);
-}
-
-/* ── Contract list cards ─────────────────────────────────────────────────────── */
-.contract-card--clickable {
-  cursor: pointer;
-}
-.contract-card--clickable:hover {
-  border-color: var(--color-accent, #6366f1);
-}
-.contract-card--selected {
-  border-color: var(--color-accent, #6366f1);
-  background: color-mix(in srgb, var(--color-accent, #6366f1) 5%, transparent);
-}
-.contract-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* ── Chat column ─────────────────────────────────────────────────────────────── */
 .chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
   flex-shrink: 0;
 }
-.chat-title {
-  font-size: 0.875rem;
+.chat-header-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+}
+.chat-heading {
+  font-size: 0.9375rem;
   font-weight: 600;
+  color: #1e1b4b;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.chat-subheading {
+  font-size: 0.775rem;
+  color: #9ca3af;
+}
+
+.btn-new-chat {
+  font-size: 0.775rem;
+  font-weight: 500;
+  color: #6366f1;
+  background: none;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  white-space: nowrap;
+}
+.btn-new-chat:hover {
+  background: rgba(99, 102, 241, 0.07);
+  border-color: rgba(99, 102, 241, 0.45);
 }
 
 .chat-context {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 1rem;
-  background: color-mix(in srgb, var(--color-accent, #6366f1) 8%, transparent);
-  border-bottom: 1px solid var(--color-border, #e5e7eb);
-  font-size: 0.78rem;
+  justify-content: space-between;
+  padding: 0.4rem 1.25rem;
+  background: rgba(99, 102, 241, 0.06);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
   flex-shrink: 0;
 }
-.chat-context-label {
-  color: var(--color-muted, #6b7280);
-  white-space: nowrap;
+.chat-context-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8rem;
+}
+.chat-context-inner svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: #6366f1;
+  flex-shrink: 0;
 }
 .chat-context-name {
   font-weight: 500;
-  flex: 1;
+  color: #4338ca;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chat-context-clear {
+.chat-context-label {
+  color: #9ca3af;
+}
+.chat-context-dismiss {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0.1rem;
-  color: var(--color-muted, #9ca3af);
+  color: #9ca3af;
+  padding: 0.15rem;
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  transition: color 0.15s;
 }
-.chat-context-clear:hover {
-  color: var(--color-text, #374151);
+.chat-context-dismiss:hover {
+  color: #374151;
 }
-.chat-context-clear svg {
-  width: 0.85rem;
-  height: 0.85rem;
+.chat-context-dismiss svg {
+  width: 0.8rem;
+  height: 0.8rem;
 }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   min-height: 0;
 }
 .chat-empty {
-  color: var(--color-muted, #9ca3af);
-  font-size: 0.85rem;
-  text-align: center;
   margin: auto;
-  line-height: 1.6;
+  text-align: center;
 }
-.chat-message {
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+.suggestion-pill {
+  font-size: 0.775rem;
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.07);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 99px;
+  padding: 0.3rem 0.8rem;
+  cursor: default;
+}
+
+.chat-msg {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  max-width: 85%;
+  gap: 0.2rem;
+  max-width: 80%;
 }
-.chat-message--user {
+.chat-msg--user {
   align-self: flex-end;
   align-items: flex-end;
 }
-.chat-message--assistant {
+.chat-msg--ai {
   align-self: flex-start;
   align-items: flex-start;
 }
+
 .chat-bubble {
-  padding: 0.55rem 0.85rem;
-  border-radius: 12px;
+  padding: 0.55rem 0.9rem;
+  border-radius: 14px;
   font-size: 0.875rem;
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
 }
-.chat-message--user .chat-bubble {
-  background: var(--color-accent, #6366f1);
+.chat-msg--user .chat-bubble {
+  background: #4f46e5;
   color: #fff;
-  border-bottom-right-radius: 3px;
+  border-bottom-right-radius: 4px;
 }
-.chat-message--assistant .chat-bubble {
-  background: var(--color-bg, #f3f4f6);
-  color: var(--color-text, #111827);
-  border-bottom-left-radius: 3px;
+.chat-msg--ai .chat-bubble {
+  background: rgba(255, 255, 255, 0.9);
+  color: #111827;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-bottom-left-radius: 4px;
 }
 .chat-bubble--error {
   background: #fee2e2 !important;
   color: #991b1b !important;
-}
-.chat-badges {
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-.chat-badge {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.45rem;
-  border-radius: 99px;
-  background: var(--color-border, #e5e7eb);
-  color: var(--color-muted, #6b7280);
+  border-color: transparent !important;
 }
 
-.chat-typing {
+.msg-model {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  padding: 0.1rem 0.4rem;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 99px;
+}
+
+.typing-dots {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 0.65rem 1rem;
 }
-.chat-typing span {
-  width: 6px;
-  height: 6px;
+.typing-dots span {
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--color-muted, #9ca3af);
-  animation: typing-bounce 1.2s infinite ease-in-out;
+  background: #9ca3af;
+  animation: dot-bounce 1.2s infinite ease-in-out;
 }
-.chat-typing span:nth-child(2) {
+.typing-dots span:nth-child(2) {
   animation-delay: 0.2s;
 }
-.chat-typing span:nth-child(3) {
+.typing-dots span:nth-child(3) {
   animation-delay: 0.4s;
 }
-@keyframes typing-bounce {
+@keyframes dot-bounce {
   0%,
   60%,
   100% {
@@ -1208,51 +1013,549 @@ function isObject(val) {
   }
 }
 
-.chat-input-row {
+.chat-compose {
   display: flex;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid rgba(99, 102, 241, 0.1);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
   flex-shrink: 0;
 }
-.chat-input {
+.compose-input {
   flex: 1;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
   font-size: 0.875rem;
   outline: none;
-  background: var(--color-surface, #fff);
-  color: var(--color-text, #111827);
+  background: #fff;
+  color: #111827;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
-.chat-input:focus {
-  border-color: var(--color-accent, #6366f1);
+.compose-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
-.chat-input:disabled {
+.compose-input:disabled {
   opacity: 0.6;
 }
-
-/* ── Shared ───────────────────────────────────────────────────────────────────── */
-.btn-icon {
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
+.compose-send {
+  width: 2.25rem;
+  height: 2.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
+}
+.compose-send:hover:not(:disabled) {
+  background: #4338ca;
+}
+.compose-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.compose-send svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* ── Workspace ────────────────────────────────────────────────────────────── */
+.workspace {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.workspace-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ── Accordion ────────────────────────────────────────────────────────────── */
+.accordion {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  background: #f9fafb;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.accordion-trigger:hover {
+  background: #f3f4f6;
+}
+
+.accordion-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+.accordion-label svg {
+  width: 1rem;
+  height: 1rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.badge-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #4338ca;
+  border-radius: 99px;
+  padding: 0.1rem 0.45rem;
+}
+
+.chevron {
+  width: 1rem;
+  height: 1rem;
+  color: #9ca3af;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.accordion.open .chevron {
+  transform: rotate(180deg);
+}
+
+.accordion-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.accordion.open .accordion-panel {
+  grid-template-rows: 1fr;
+}
+
+.accordion-panel-inner {
+  overflow: hidden;
+}
+
+/* ── Contract rows ────────────────────────────────────────────────────────── */
+.contract-list {
+  padding: 0.375rem;
+}
+
+.contract-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  transition: background 0.12s;
+}
+.contract-row--clickable {
+  cursor: pointer;
+}
+.contract-row--clickable:hover {
+  background: #f9fafb;
+}
+.contract-row--selected {
+  background: rgba(99, 102, 241, 0.07);
+}
+.contract-row--selected:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.contract-row-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  color: #d1d5db;
+}
+.contract-row-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.contract-row--selected .contract-row-icon {
+  color: #818cf8;
+}
+
+.contract-row-body {
+  flex: 1;
+  min-width: 0;
+}
+.contract-row-name {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contract-row-meta {
+  font-size: 0.74rem;
+  color: #9ca3af;
+  margin-top: 0.1rem;
+}
+
+.contract-row-end {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+/* ── Panel empty/loading states ───────────────────────────────────────────── */
+.panel-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  font-size: 0.84rem;
+  color: #9ca3af;
+}
+.panel-state--empty svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  opacity: 0.4;
+}
+
+/* ── Badges ───────────────────────────────────────────────────────────────── */
+.badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.18rem 0.5rem;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.badge--blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.badge--amber {
+  background: #fef3c7;
+  color: #92400e;
+}
+.badge--red {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* ── Dropzone ─────────────────────────────────────────────────────────────── */
+.dropzone {
+  margin: 0.75rem;
+  border: 2px dashed #e5e7eb;
+  border-radius: 8px;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.dropzone:hover,
+.dropzone--over {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.03);
+}
+.dropzone svg {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+.dropzone-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin: 0 0 0.2rem;
+}
+.dropzone-hint {
+  font-size: 0.775rem;
+  color: #9ca3af;
+  margin: 0 0 0.75rem;
+}
+.dropzone-tags {
+  display: flex;
+  justify-content: center;
+  gap: 0.375rem;
+}
+.dropzone-tags span {
+  font-size: 0.7rem;
+  background: #f3f4f6;
+  color: #6b7280;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.upload-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+.upload-bar {
+  flex: 1;
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.upload-fill {
+  height: 100%;
+  background: #6366f1;
+  width: 60%;
+  animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+@keyframes progress-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.upload-err {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0.75rem 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: #fee2e2;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #991b1b;
+}
+
+/* ── Right panel (detail) ─────────────────────────────────────────────────── */
+.workspace-right {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  min-height: 180px;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 180px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  gap: 0.75rem;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  padding: 2rem;
+  text-align: center;
+}
+.detail-empty svg {
+  width: 2.25rem;
+  height: 2.25rem;
+  opacity: 0.28;
+}
+
+.detail-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+}
+.detail-doc-type {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 0.2rem;
+  letter-spacing: -0.01em;
+}
+.detail-doc-meta {
+  font-size: 0.74rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.detail-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.detail-loading {
+  padding: 2rem;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.875rem;
+}
+.detail-error-msg {
+  padding: 1rem 1.25rem;
+  color: #991b1b;
+  font-size: 0.875rem;
+}
+.detail-notice {
+  margin: 0.75rem 1.25rem;
+  padding: 0.6rem 0.85rem;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+/* ── Fields table ─────────────────────────────────────────────────────────── */
+.fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+.fields-table th {
+  text-align: left;
+  font-weight: 500;
+  color: #9ca3af;
+  padding: 0.5rem 0 0.5rem 1.25rem;
+  width: 38%;
+  vertical-align: top;
+  border-bottom: 1px solid #f3f4f6;
+}
+.fields-table td {
+  padding: 0.5rem 1.25rem 0.5rem 0.625rem;
+  vertical-align: top;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+}
+.val-nil {
+  color: #d1d5db;
+  font-style: italic;
+}
+.val-yes {
+  color: #15803d;
+  font-weight: 500;
+}
+.val-no {
+  color: #9ca3af;
+}
+
+.field-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+.field-list li {
+  margin-bottom: 0.2rem;
+}
+
+.obj-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.2rem 0;
+}
+.obj-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+}
+.obj-card-name {
+  font-weight: 600;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+.obj-card-dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.65rem;
+  margin: 0;
+}
+.obj-card-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+.obj-card-row dt {
+  color: #9ca3af;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.obj-card-row dt::after {
+  content: ":";
+}
+.obj-card-row dd {
+  margin: 0;
+  color: #374151;
+}
+
+/* ── Shared buttons ───────────────────────────────────────────────────────── */
+.btn-ghost-sm {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  padding: 0.18rem 0.5rem;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+  white-space: nowrap;
+}
+.btn-ghost-sm:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.btn-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #9ca3af;
+  flex-shrink: 0;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.btn-icon:hover {
+  background: #f3f4f6;
+  color: #374151;
 }
 .btn-icon svg {
   width: 1rem;
   height: 1rem;
 }
-.badge-warning {
-  background: #fef3c7;
-  color: #92400e;
-}
-.badge-error {
-  background: #fee2e2;
-  color: #991b1b;
-}
+
+/* ── Spin ─────────────────────────────────────────────────────────────────── */
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -1260,5 +1563,24 @@ function isObject(val) {
 }
 .spin {
   animation: spin 1.2s linear infinite;
+}
+
+/* ── Mobile ───────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .chat-zone {
+    height: 340px;
+  }
+  .chat-subheading {
+    display: none;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .workspace-right {
+    position: static;
+    max-height: none;
+  }
 }
 </style>
