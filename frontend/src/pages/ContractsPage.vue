@@ -305,10 +305,87 @@
           </table>
         </div>
 
-        <div class="contract-detail-footer">
-          <button class="btn btn-primary" disabled title="Coming soon">
-            Ask a question
-          </button>
+        <!-- Chat section -->
+        <div v-if="detailData && !detailLoading" class="contract-chat">
+          <div class="contract-chat-header">
+            <span class="contract-chat-title">Ask a question</span>
+            <button
+              v-if="chatMessages.length"
+              class="btn btn-ghost btn-sm"
+              @click="clearChat"
+            >
+              New conversation
+            </button>
+          </div>
+
+          <div ref="chatScroll" class="contract-chat-messages">
+            <p v-if="!chatMessages.length && !chatPending" class="chat-empty">
+              Ask anything about this contract — parties, notice periods,
+              obligations…
+            </p>
+
+            <div
+              v-for="msg in chatMessages"
+              :key="msg.id"
+              :class="[
+                'chat-message',
+                msg.role === 'user'
+                  ? 'chat-message--user'
+                  : 'chat-message--assistant',
+              ]"
+            >
+              <div :class="['chat-bubble', msg.error && 'chat-bubble--error']">
+                {{ msg.content }}
+              </div>
+              <div
+                v-if="msg.role === 'assistant' && !msg.error"
+                class="chat-badges"
+              >
+                <span
+                  v-if="msg.sources?.includes('original_document')"
+                  class="chat-badge"
+                  >From contract document</span
+                >
+                <span
+                  v-else-if="msg.sources?.includes('extracted_fields')"
+                  class="chat-badge"
+                  >From extracted fields</span
+                >
+                <span
+                  v-if="msg.model?.includes('opus')"
+                  class="chat-badge chat-badge--opus"
+                  >Deep analysis</span
+                >
+              </div>
+            </div>
+
+            <div
+              v-if="chatPending"
+              class="chat-message chat-message--assistant"
+            >
+              <div class="chat-bubble chat-typing">
+                <span /><span /><span />
+              </div>
+            </div>
+          </div>
+
+          <form class="contract-chat-input" @submit.prevent="sendMessage">
+            <input
+              v-model="chatInput"
+              type="text"
+              placeholder="Ask about this contract…"
+              :disabled="chatPending"
+              class="chat-input"
+              @keydown.enter.prevent="sendMessage"
+            />
+            <button
+              type="submit"
+              :disabled="!chatInput.trim() || chatPending"
+              class="btn btn-primary btn-sm"
+            >
+              Send
+            </button>
+          </form>
         </div>
       </aside>
     </div>
@@ -316,7 +393,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useAuth } from "../composables/useAuth";
 
 const auth = useAuth();
@@ -333,6 +410,13 @@ const detailLoading = ref(false);
 const detailError = ref("");
 
 const polls = new Map(); // correlationId → intervalId
+
+// Chat state
+const sessionId = ref(crypto.randomUUID());
+const chatMessages = ref([]); // { id, role, content, sources?, model?, error? }
+const chatInput = ref("");
+const chatPending = ref(false);
+const chatScroll = ref(null);
 
 const selectedContract = computed(
   () =>
@@ -451,7 +535,71 @@ watch(selectedId, (id) => {
     detailData.value = null;
     detailError.value = "";
   }
+  // Reset chat for each new contract
+  sessionId.value = crypto.randomUUID();
+  chatMessages.value = [];
+  chatInput.value = "";
+  chatPending.value = false;
 });
+
+async function sendMessage() {
+  const msg = chatInput.value.trim();
+  if (!msg || chatPending.value) return;
+  chatInput.value = "";
+  chatMessages.value.push({
+    id: crypto.randomUUID(),
+    role: "user",
+    content: msg,
+  });
+  chatPending.value = true;
+  scrollChatToBottom();
+
+  try {
+    const res = await fetch("/api/contract-chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": `Bearer ${auth.getToken()}`,
+      },
+      body: JSON.stringify({
+        correlationId: selectedId.value,
+        sessionId: sessionId.value,
+        message: msg,
+      }),
+    });
+    if (!res.ok) throw new Error(`Chat failed (${res.status})`);
+    const data = await res.json();
+    chatMessages.value.push({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: data.answer,
+      sources: data.sources,
+      model: data.modelUsed,
+    });
+  } catch {
+    chatMessages.value.push({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "Something went wrong. Please try again.",
+      error: true,
+    });
+  } finally {
+    chatPending.value = false;
+    scrollChatToBottom();
+  }
+}
+
+function clearChat() {
+  chatMessages.value = [];
+  sessionId.value = crypto.randomUUID();
+}
+
+function scrollChatToBottom() {
+  nextTick(() => {
+    if (chatScroll.value)
+      chatScroll.value.scrollTop = chatScroll.value.scrollHeight;
+  });
+}
 
 function dismissFailed(correlationId) {
   contracts.value = contracts.value.filter(
@@ -723,5 +871,147 @@ function isObject(val) {
 .btn-icon svg {
   width: 1.1rem;
   height: 1.1rem;
+}
+
+/* ── Chat ─────────────────────────────────────────────────── */
+.contract-chat {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  flex: 1;
+  min-height: 0;
+}
+.contract-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+.contract-chat-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text, #111827);
+}
+.contract-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 160px;
+  max-height: 340px;
+}
+.chat-empty {
+  color: var(--color-muted, #9ca3af);
+  font-size: 0.85rem;
+  text-align: center;
+  margin: auto;
+}
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 85%;
+}
+.chat-message--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.chat-message--assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.chat-bubble {
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.chat-message--user .chat-bubble {
+  background: var(--color-accent, #6366f1);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+}
+.chat-message--assistant .chat-bubble {
+  background: var(--color-bg, #f3f4f6);
+  color: var(--color-text, #111827);
+  border-bottom-left-radius: 3px;
+}
+.chat-bubble--error {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
+.chat-badges {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.chat-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 99px;
+  background: var(--color-border, #e5e7eb);
+  color: var(--color-muted, #6b7280);
+}
+.chat-badge--opus {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+/* Typing indicator */
+.chat-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.65rem 1rem;
+}
+.chat-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-muted, #9ca3af);
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+.chat-typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.chat-typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-5px);
+  }
+}
+
+.contract-chat-input {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem 1rem;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+.chat-input {
+  flex: 1;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  outline: none;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #111827);
+}
+.chat-input:focus {
+  border-color: var(--color-accent, #6366f1);
+}
+.chat-input:disabled {
+  opacity: 0.6;
 }
 </style>
