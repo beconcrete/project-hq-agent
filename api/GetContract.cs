@@ -58,7 +58,7 @@ public class GetContract
             try
             {
                 var extraction = JsonSerializer.Deserialize<JsonElement>(entity.Fields);
-                if (extraction.TryGetProperty("Fields", out var ef) &&
+                if (extraction.TryGetProperty("extractedFields", out var ef) &&
                     ef.ValueKind != JsonValueKind.Null)
                     fields = ef;
             }
