@@ -1,5 +1,4 @@
 using ContractOrchestratorAgent.Services;
-using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
@@ -9,12 +8,12 @@ namespace ContractOrchestratorAgent.Functions;
 
 public class ContractIngestion
 {
-    private readonly IContractAnalysisWorkflow _workflow;
+    private readonly OpenAIContractWorkflow _workflow;
     private readonly TableStorageService _table;
     private readonly ILogger<ContractIngestion> _logger;
 
     public ContractIngestion(
-        IContractAnalysisWorkflow workflow,
+        OpenAIContractWorkflow workflow,
         TableStorageService table,
         ILogger<ContractIngestion> logger)
     {

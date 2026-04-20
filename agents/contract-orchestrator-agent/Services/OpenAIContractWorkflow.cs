@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using HqAgent.Shared.Abstractions;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Agents.AI;
@@ -17,7 +16,7 @@ namespace ContractOrchestratorAgent.Services;
 /// OpenAI supports assistant message prefill, so the MAF triage → extraction
 /// handoff works correctly (unlike Anthropic which rejects it).
 /// </summary>
-public class OpenAIContractWorkflow : IContractAnalysisWorkflow
+public class OpenAIContractWorkflow
 {
     private readonly BlobStorageService _blobs;
     private readonly IHttpClientFactory _httpFactory;
