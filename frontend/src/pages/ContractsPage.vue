@@ -371,7 +371,8 @@ async function pollStatus(correlationId) {
 async function fetchDetail(correlationId) {
   try {
     const res = await fetch(
-      `/api/get-contract?correlationId=${correlationId}`,
+//      `/api/get-contract?correlationId=${correlationId}`,
+      `/api/get-contract?correlationId=32b39f30-967d-496d-a204-a40a76326be8`,
       {
         headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
       },
