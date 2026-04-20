@@ -1,4 +1,4 @@
-name: Deploy Contract Orchestrator Agent
+name: Deploy Agent Function App
 
 on:
   push:
