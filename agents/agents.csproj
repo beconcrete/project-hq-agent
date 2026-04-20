@@ -6,7 +6,7 @@
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>ContractOrchestratorAgent</RootNamespace>
+    <RootNamespace>HqAgent.Agents</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\shared\HqAgent.Shared\HqAgent.Shared.csproj" />
+    <ProjectReference Include="..\shared\HqAgent.Shared\HqAgent.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

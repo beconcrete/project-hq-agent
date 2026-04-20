@@ -1,25 +1,25 @@
-using ContractOrchestratorAgent.Services;
+using HqAgent.Agents.Contract.Agents;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-namespace ContractOrchestratorAgent.Functions;
+namespace HqAgent.Agents.Contract.Triggers;
 
 public class ContractIngestion
 {
-    private readonly OpenAIContractWorkflow _workflow;
-    private readonly TableStorageService _table;
+    private readonly ContractOrchestratorAgent _agent;
+    private readonly TableStorageService       _table;
     private readonly ILogger<ContractIngestion> _logger;
 
     public ContractIngestion(
-        OpenAIContractWorkflow workflow,
-        TableStorageService table,
+        ContractOrchestratorAgent  agent,
+        TableStorageService        table,
         ILogger<ContractIngestion> logger)
     {
-        _workflow = workflow;
-        _table    = table;
-        _logger   = logger;
+        _agent  = agent;
+        _table  = table;
+        _logger = logger;
     }
 
     [Function(nameof(ContractIngestion))]
@@ -32,7 +32,7 @@ public class ContractIngestion
         ExtractionResult extraction;
         try
         {
-            extraction = await _workflow.RunAsync(msg, context.CancellationToken);
+            extraction = await _agent.RunAsync(msg, context.CancellationToken);
         }
         catch (Exception ex)
         {

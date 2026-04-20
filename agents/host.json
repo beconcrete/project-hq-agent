@@ -3,7 +3,6 @@
   "logging": {
     "logLevel": {
       "default": "Warning",
-      "ContractOrchestratorAgent": "Information",
       "HqAgent": "Information",
       "Function": "Information",
       "Host.Results": "Information",

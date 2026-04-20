@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using HqAgent.Agents.Models;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Agents.AI;
@@ -9,20 +10,19 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 
-namespace ContractOrchestratorAgent.Services;
+namespace HqAgent.Agents.Contract.Agents;
 
 /// <summary>
 /// Contract analysis pipeline using OpenAI + MAF handoff workflow.
 /// OpenAI supports assistant message prefill, so the MAF triage → extraction
 /// handoff works correctly (unlike Anthropic which rejects it).
 /// </summary>
-public class OpenAIContractWorkflow
+public class ContractOrchestratorAgent
 {
     private readonly BlobStorageService _blobs;
     private readonly IHttpClientFactory _httpFactory;
     private readonly string _apiKey;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly ILogger<OpenAIContractWorkflow> _logger;
+    private readonly ILogger<ContractOrchestratorAgent> _logger;
 
     private readonly IChatClient _triageChatClient;
     private readonly IChatClient _extractionChatClient;
@@ -69,16 +69,15 @@ public class OpenAIContractWorkflow
         }
         """;
 
-    public OpenAIContractWorkflow(
+    public ContractOrchestratorAgent(
         BlobStorageService blobs,
         IHttpClientFactory httpFactory,
         IConfiguration config,
         ILoggerFactory loggerFactory)
     {
-        _blobs         = blobs;
-        _httpFactory   = httpFactory;
-        _loggerFactory = loggerFactory;
-        _logger        = loggerFactory.CreateLogger<OpenAIContractWorkflow>();
+        _blobs       = blobs;
+        _httpFactory = httpFactory;
+        _logger      = loggerFactory.CreateLogger<ContractOrchestratorAgent>();
 
         _apiKey = config["OPENAI_API_KEY"]
             ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
@@ -223,8 +222,6 @@ public class OpenAIContractWorkflow
         return new ExtractionResult(documentType, triageConfidence, extractedFields, extractionConfidence, modelUsed, pendingReview);
     }
 
-    // Returns the first brace-balanced, parseable JSON object found in the text.
-    // "First" gives us the outermost object even when extractedFields contains nested objects.
     private static string ExtractOutermostJson(string text)
     {
         var searchFrom = 0;

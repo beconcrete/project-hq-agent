@@ -1,6 +1,6 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
-using ContractOrchestratorAgent.Services;
+using HqAgent.Agents.Contract.Agents;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,7 +24,8 @@ var host = new HostBuilder()
         services.AddSingleton<BlobStorageService>();
         services.AddSingleton<TableStorageService>();
 
-        services.AddSingleton<OpenAIContractWorkflow>();
+        services.AddSingleton<ContractOrchestratorAgent>();
+        services.AddSingleton<ContractChatAgent>();
     })
     .Build();
 

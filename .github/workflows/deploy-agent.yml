@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "agents/contract-orchestrator-agent/**"
+      - "agents/**"
       - "shared/**"
       - ".github/workflows/deploy-agent.yml"
 
@@ -27,7 +27,7 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Publish
-        run: dotnet publish agents/contract-orchestrator-agent/ContractOrchestratorAgent.csproj --configuration Release --output agents/publish
+        run: dotnet publish agents/agents.csproj --configuration Release --output agents/publish
 
       - name: Azure login
         uses: azure/login@v2
