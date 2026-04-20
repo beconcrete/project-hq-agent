@@ -24,7 +24,7 @@ public class ContractExtractionEntity : ITableEntity
     /// <summary>Full ExtractionResult serialised as JSON.</summary>
     public string   Fields               { get; set; } = string.Empty;
 
-    public string   ModelUsed            { get; set; } = string.Empty;
-    public DateTime ProcessedAt          { get; set; }
-    public string   Status               { get; set; } = string.Empty;
+    public string    ModelUsed            { get; set; } = string.Empty;
+    public DateTime? ProcessedAt         { get; set; }
+    public string    Status              { get; set; } = string.Empty;
 }
