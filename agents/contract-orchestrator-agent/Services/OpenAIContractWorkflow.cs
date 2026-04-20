@@ -91,7 +91,8 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
 
     public async Task<ExtractionResult> RunAsync(ContractMessage msg, CancellationToken ct = default)
     {
-        _logger.LogInformation("Processing contract {CorrelationId} — {BlobName}", msg.CorrelationId, msg.BlobName);
+        _logger.LogInformation("Processing contract {CorrelationId} — {BlobName} — apiKeyLength:{KeyLen} apiKeyPrefix:{Prefix}",
+            msg.CorrelationId, msg.BlobName, _apiKey.Length, _apiKey.Length >= 7 ? _apiKey[..7] : "(short)");
 
         var userMessage = await BuildMessageAsync(msg, ct);
 
