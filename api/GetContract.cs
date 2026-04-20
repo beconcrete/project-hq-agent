@@ -58,9 +58,15 @@ public class GetContract
             try
             {
                 var extraction = JsonSerializer.Deserialize<JsonElement>(entity.Fields);
-                if (extraction.TryGetProperty("extractedFields", out var ef) &&
-                    ef.ValueKind != JsonValueKind.Null)
-                    fields = ef;
+                // ExtractionResult is serialised with PascalCase property names.
+                // ExtractedFields itself is a raw JSON string — deserialise it a second time.
+                if (extraction.TryGetProperty("ExtractedFields", out var ef) &&
+                    ef.ValueKind == JsonValueKind.String)
+                {
+                    var inner = ef.GetString();
+                    if (!string.IsNullOrEmpty(inner))
+                        fields = JsonSerializer.Deserialize<JsonElement>(inner);
+                }
             }
             catch (JsonException) { }
         }

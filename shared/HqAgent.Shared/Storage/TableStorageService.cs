@@ -100,10 +100,17 @@ public class TableStorageService
             ? $"UserId eq '{userId}'"
             : null;
 
-        await foreach (var entity in table.QueryAsync<ContractExtractionEntity>(
-            filter: filter, cancellationToken: ct))
+        try
         {
-            results.Add(entity);
+            await foreach (var entity in table.QueryAsync<ContractExtractionEntity>(
+                filter: filter, cancellationToken: ct))
+            {
+                results.Add(entity);
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            // Table does not exist yet — return empty list
         }
 
         results.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt));
