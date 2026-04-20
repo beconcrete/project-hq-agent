@@ -133,9 +133,10 @@ public class OpenAIContractWorkflow : IContractAnalysisWorkflow
                 break;
         }
 
-        _logger.LogInformation("Workflow complete for {CorrelationId}", msg.CorrelationId);
+        var raw = sb.ToString();
+        _logger.LogInformation("Workflow output for {CorrelationId}: {Raw}", msg.CorrelationId, raw);
 
-        return ParseExtraction(sb.ToString());
+        return ParseExtraction(raw);
     }
 
     private async Task<ChatMessage> BuildMessageAsync(ContractMessage msg, CancellationToken ct)
