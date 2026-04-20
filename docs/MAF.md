@@ -1,6 +1,8 @@
 # Microsoft Agents Framework (MAF) — Patterns and Learnings
 
-Packages: `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows`, `Microsoft.Agents.AI.Anthropic`
+Packages: `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows`
+
+> **We use OpenAI, not Anthropic, for MAF workflows.** See the [Model provider decision](#model-provider-decision--openai-only) section.
 
 ---
 
@@ -9,7 +11,7 @@ Packages: `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows`, `Microsoft.Age
 `HandoffWorkflowBuilder` is deprecated/experimental (`MAAIW001` warning). Always use:
 
 ```csharp
-#pragma warning disable MAAIW001  // evaluation API — suppress required
+#pragma warning disable MAAIW001  // required — build errors without it despite IDE hints
 var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(startingAgent)
     .WithHandoff(agentA, agentB)       // A can hand off to B
     .WithHandoff(agentB, agentA)       // B can return to A (if needed)
@@ -18,6 +20,10 @@ var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(startingAgent)
 ```
 
 Declare every handoff direction explicitly — the framework only routes where you tell it to.
+
+### The `#pragma warning disable MAAIW001` is NOT optional
+
+IDE hints may say "remove unnecessary suppression" — ignore them. Removing the pragma causes a hard build error. This has been verified. Keep the pragma.
 
 ---
 
@@ -58,29 +64,178 @@ The `sessionId` scopes the conversation. Use a correlationId or similar unique k
 
 ---
 
+## Parsing workflow output — use the outermost JSON object
+
+The MAF workflow produces text output via `AgentResponseUpdateEvent` chunks. For structured extraction jobs the final agent is instructed to output a single JSON object. However, if that JSON object contains nested objects (e.g. an `extractedFields` property that is itself an object), naively scanning for the "last" JSON object in the output gives you the innermost nested object, not the top-level result — all your expected fields will be missing.
+
+**Always extract the first brace-balanced, parseable JSON object** (the outermost one):
+
+```csharp
+private static string ExtractOutermostJson(string text)
+{
+    var searchFrom = 0;
+    while (true)
+    {
+        var start = text.IndexOf('{', searchFrom);
+        if (start == -1) break;
+        var candidate = TryExtractJsonAt(text, start);
+        if (candidate != null)
+        {
+            try { JsonDocument.Parse(candidate); return candidate; }
+            catch (JsonException) { }
+        }
+        searchFrom = start + 1;
+    }
+    throw new InvalidOperationException(
+        $"No JSON object in workflow response. Preview: {text[..Math.Min(300, text.Length)]}");
+}
+```
+
+`TryExtractJsonAt` counts braces to find the balanced end of a JSON object. The outer loop tries each `{` in order. The first one that is both brace-balanced AND parses as valid JSON is the outermost result object.
+
+See `agents/contract-orchestrator-agent/Services/OpenAIContractWorkflow.cs` for the full implementation.
+
+---
+
+## Model provider decision — OpenAI only
+
+**We use OpenAI for MAF workflows. Do not use Anthropic with MAF handoff.**
+
+### Why
+
+MAF's handoff mechanism works by passing the full conversation history — including assistant messages from the previous agent — to the next agent. This is called **assistant message prefill**. Anthropic's API rejects this pattern: it returns an error when a conversation starts with an assistant turn.
+
+OpenAI accepts assistant message prefill, so the triage → extraction handoff works correctly — the extraction agent sees the triage agent's classification in the conversation history and builds on it.
+
+### Model assignments
+
+| Step | Model | Reason |
+|---|---|---|
+| PDF text extraction | `gpt-4.1-mini` | Cheap, fast, handles the file content type |
+| Triage / classification | `gpt-4.1-mini` | Cheap, fast |
+| Field extraction | `gpt-4.1` | Best accuracy for contract analysis |
+
+### NuGet packages
+
+```xml
+<PackageReference Include="OpenAI" Version="2.*" />
+<PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="9.*" />
+<PackageReference Include="Microsoft.Agents.AI" Version="1.1.*" />
+<PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.1.*" />
+```
+
+Do **not** add `Microsoft.Agents.AI.Anthropic` — it is not used and the Anthropic provider does not support the handoff pattern.
+
+### Wiring up OpenAI chat clients
+
+```csharp
+var openAiClient = new OpenAIClient(apiKey);
+IChatClient triageChatClient     = openAiClient.GetChatClient("gpt-4.1-mini").AsIChatClient();
+IChatClient extractionChatClient = openAiClient.GetChatClient("gpt-4.1").AsIChatClient();
+
+var triageAgent = new ChatClientAgent(triageChatClient, new ChatClientAgentOptions
+{
+    Name        = "triage",
+    Description = "Classifies the contract document type",
+    ChatOptions = new ChatOptions { Instructions = TriageInstructions },
+});
+```
+
+---
+
+## PDF handling — extract text before entering the MAF workflow
+
+MAF `ChatMessage` takes text content. PDFs must be extracted to plain text **before** building the `ChatMessage` for the workflow. Use the OpenAI `file` content type with inline base64:
+
+```csharp
+var body = JsonSerializer.Serialize(new
+{
+    model      = "gpt-4.1-mini",
+    max_tokens = 8192,
+    messages = new[]
+    {
+        new
+        {
+            role    = "user",
+            content = new object[]
+            {
+                new
+                {
+                    type = "file",
+                    file = new
+                    {
+                        filename  = "document.pdf",
+                        file_data = $"data:application/pdf;base64,{Convert.ToBase64String(pdfBytes)}",
+                    }
+                },
+                new { type = "text", text = "Extract all text content verbatim, preserving structure. No commentary." }
+            }
+        }
+    }
+});
+```
+
+Then pass the extracted text string into the MAF workflow as `new ChatMessage(ChatRole.User, [new TextContent(text)])`.
+
+---
+
+## Single-shot workflow pattern (queue-triggered jobs)
+
+For background processing jobs — queue triggers, blob triggers — create agents and the workflow fresh inside the method that handles each message. Each invocation gets its own isolated empty history. No `ChatHistoryProvider` or history persistence is needed.
+
+```csharp
+public async Task<ExtractionResult> RunAsync(ContractMessage msg, CancellationToken ct)
+{
+    // Build agents fresh — each invocation is independent
+    var triageAgent    = new ChatClientAgent(_triageChatClient, ...);
+    var extractAgent   = new ChatClientAgent(_extractionChatClient, ...);
+
+    var workflow = AgentWorkflowBuilder.CreateHandoffBuilderWith(triageAgent)
+        .WithHandoff(triageAgent, extractAgent)
+        .Build();
+
+    await using var run = await InProcessExecution.OpenStreamingAsync(
+        workflow, sessionId: msg.CorrelationId);
+    // ...
+}
+```
+
+The `IChatClient` instances (`_triageChatClient`, `_extractionChatClient`) can be long-lived singletons — only the workflow and agents need to be scoped per invocation.
+
+---
+
+## Agent registration — no interface needed for single implementations
+
+If there is only one implementation of a workflow service, register it directly without an interface. Interfaces add indirection without benefit when there is nothing to swap.
+
+```csharp
+// Program.cs
+services.AddSingleton<OpenAIContractWorkflow>();
+
+// ContractIngestion.cs
+public ContractIngestion(OpenAIContractWorkflow workflow, ...)
+```
+
+---
+
 ## Shared conversation history — `ChatHistoryProvider`
 
-By default each agent starts with empty history. To let agents see each other's messages within the same workflow session AND across requests, all agents must share the same `ChatHistoryProvider` instance.
+Only needed for interactive chat sessions where agents must see each other's messages across turns or requests.
 
 ```csharp
 var historyProvider = new MyChatHistoryProvider(...);
 
 var agentA = new ChatClientAgent(chatClient, new ChatClientAgentOptions
 {
-    Name = "...",
-    Description = "...",
-    ChatOptions = new ChatOptions { Instructions = "..." },
+    Name                = "...",
     ChatHistoryProvider = historyProvider,   // ← same instance on every agent
 });
 ```
 
-For **single-shot jobs** (one run = one result, no persistence needed) an in-memory provider is sufficient. Build the agents and workflow fresh inside the method that executes the job so each run gets its own empty history.
-
 ### What to persist vs what NOT to persist
 
-From `StoreChatHistoryAsync`:
 - **Store**: external user messages, assistant text responses
-- **Do NOT store**: `FunctionCallContent` or `FunctionResultContent` messages — orphaned tool-call/result pairs cause the model to reject the conversation on subsequent loads
+- **Do NOT store**: `FunctionCallContent` or `FunctionResultContent` — orphaned tool pairs cause the model to reject the conversation on reload
 
 ```csharp
 private static bool IsToolRelated(ChatMessage msg) =>
@@ -89,16 +244,14 @@ private static bool IsToolRelated(ChatMessage msg) =>
 
 ### Message source attribution
 
-`AgentRequestMessageSourceAttribution.SourceType` tells you where a message came from:
+`AgentRequestMessageSourceAttribution.SourceType`:
 - `External` — real user input → persist
-- `ChatHistory` — already in storage → skip (would duplicate)
-- `AIContextProvider` — transient injections (context, compaction summaries) → skip (re-added each turn)
+- `ChatHistory` — already in storage → skip
+- `AIContextProvider` — transient injections → skip
 
 ---
 
 ## Defining tools — `[Description]` + `AIFunctionFactory`
-
-Tools are regular C# methods on injected services. Decorate with `[Description]` and wrap with `AIFunctionFactory.Create`:
 
 ```csharp
 public class MyApiTool
@@ -130,7 +283,7 @@ Use `AIContextProvider` implementations to inject per-request context (user ID, 
 
 ## Compaction — managing context window
 
-For long-running chat sessions, add a `CompactionProvider` to prevent the context window from filling up. Strategies execute in order from gentlest to most aggressive:
+For long-running chat sessions, add a `CompactionProvider` to prevent the context window from filling up. Not needed for single-shot processing jobs.
 
 ```csharp
 var pipeline = new PipelineCompactionStrategy([
@@ -141,8 +294,6 @@ var pipeline = new PipelineCompactionStrategy([
 ]);
 var compactionProvider = new CompactionProvider(pipeline);
 ```
-
-Not needed for single-shot processing jobs.
 
 ---
 
@@ -172,20 +323,3 @@ await foreach (var evt in run.WatchStreamAsync())
     }
 }
 ```
-
----
-
-## Anthropic integration
-
-`Microsoft.Agents.AI.Anthropic` provides the `AsAIAgent()` extension on `IAnthropicClient`:
-
-```csharp
-var agent = anthropicClient.AsAIAgent(
-    model: "claude-sonnet-4-6",
-    instructions: "...",
-    name: "agent-name",
-    description: "What this agent does — used by the router",
-    loggerFactory: loggerFactory);
-```
-
-The `description` is used by the handoff router to decide which agent to route to. Make it specific.
