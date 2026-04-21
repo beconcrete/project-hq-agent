@@ -37,3 +37,8 @@ public record ContractDetail(
     ContractSummary Summary,
     string ExtractedFieldsJson,
     ContractExtractionEntity Entity);
+
+public record ContractReference(
+    string CorrelationId,
+    string FileName,
+    string DocumentType);

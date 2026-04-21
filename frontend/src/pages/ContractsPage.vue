@@ -75,6 +75,30 @@
           <div :class="['chat-bubble', msg.error && 'chat-bubble--error']">
             {{ msg.content }}
           </div>
+          <div
+            v-if="msg.role === 'assistant' && msg.references?.length"
+            class="chat-references"
+          >
+            <button
+              v-for="ref in msg.references"
+              :key="ref.correlationId"
+              class="chat-reference"
+              @click="openContractReference(ref)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+              >
+                <path
+                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span>{{ ref.fileName || ref.documentType || "Contract" }}</span>
+            </button>
+          </div>
           <span
             v-if="msg.role === 'assistant' && !msg.error && msg.model"
             class="msg-model"
@@ -676,6 +700,7 @@ async function sendMessage() {
       role: "assistant",
       content: data.answer,
       model: data.modelUsed,
+      references: data.references ?? [],
     });
   } catch {
     chatMessages.value.push({
@@ -693,6 +718,30 @@ async function sendMessage() {
 function clearChat() {
   chatMessages.value = [];
   sessionId.value = crypto.randomUUID();
+}
+
+async function openContractReference(ref) {
+  if (!ref?.correlationId) return;
+  try {
+    const res = await fetch(
+      `/api/get-contract-download-url?correlationId=${encodeURIComponent(
+        ref.correlationId,
+      )}`,
+      {
+        headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
+      },
+    );
+    if (!res.ok) throw new Error(`Download URL failed (${res.status})`);
+    const data = await res.json();
+    if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+  } catch {
+    chatMessages.value.push({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "I could not open that contract link. Please try again.",
+      error: true,
+    });
+  }
 }
 
 function scrollChatToBottom() {
@@ -973,6 +1022,42 @@ function isObject(val) {
   background: #fee2e2 !important;
   color: #991b1b !important;
   border-color: transparent !important;
+}
+
+.chat-references {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+.chat-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 260px;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #4338ca;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chat-reference:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.38);
+}
+.chat-reference svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex-shrink: 0;
+}
+.chat-reference span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .msg-model {

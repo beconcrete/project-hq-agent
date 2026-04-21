@@ -1,4 +1,5 @@
 using Azure.Storage.Blobs;
+using Azure.Storage.Sas;
 using Microsoft.Extensions.Logging;
 
 namespace HqAgent.Shared.Storage;
@@ -28,5 +29,26 @@ public class BlobStorageService
 
         _logger.LogInformation("Downloaded {Size} bytes (content-type: {ContentType})", bytes.Length, ct_);
         return (bytes, ct_);
+    }
+
+    public Uri CreateReadSasUri(
+        string containerName,
+        string blobName,
+        TimeSpan ttl)
+    {
+        var blob = _client.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+        if (!blob.CanGenerateSasUri)
+            throw new InvalidOperationException("Blob client cannot generate SAS URI. Use a storage account connection string with account key.");
+
+        var builder = new BlobSasBuilder
+        {
+            BlobContainerName = containerName,
+            BlobName = blobName,
+            Resource = "b",
+            ExpiresOn = DateTimeOffset.UtcNow.Add(ttl),
+        };
+        builder.SetPermissions(BlobSasPermissions.Read);
+
+        return blob.GenerateSasUri(builder);
     }
 }

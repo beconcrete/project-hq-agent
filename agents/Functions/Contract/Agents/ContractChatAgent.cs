@@ -109,6 +109,7 @@ public class ContractChatAgent
         var options = new ChatCompletionOptions();
         foreach (var tool in Tools) options.Tools.Add(tool);
 
+        var references = new Dictionary<string, ContractReference>(StringComparer.OrdinalIgnoreCase);
         string answer;
         while (true)
         {
@@ -120,7 +121,7 @@ public class ContractChatAgent
                 messages.Add(new AssistantChatMessage(completion));
                 foreach (var call in completion.ToolCalls)
                 {
-                    var toolResult = await ExecuteToolAsync(call, userId, isAdmin, ct);
+                    var toolResult = await ExecuteToolAsync(call, userId, isAdmin, references, ct);
                     _logger.LogInformation("Tool {Tool} called, result length: {Len}", call.FunctionName, toolResult.Length);
                     messages.Add(new ToolChatMessage(call.Id, toolResult));
                 }
@@ -135,81 +136,114 @@ public class ContractChatAgent
         await SaveTurnAsync(sessionId, "user",      message, ct);
         await SaveTurnAsync(sessionId, "assistant", answer,  ct);
 
-        return new ChatResult(answer, MiniModel);
+        return new ChatResult(answer, MiniModel, references.Values.ToArray());
     }
 
     // ── Tools ─────────────────────────────────────────────────────────────────
 
     private async Task<string> ExecuteToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct) =>
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct) =>
         call.FunctionName switch
         {
-            "list_contracts"        => await ListContractsToolAsync(userId, isAdmin, ct),
-            "find_expiring_contracts" => await FindExpiringContractsToolAsync(call, userId, isAdmin, ct),
-            "find_renewal_windows"  => await FindRenewalWindowsToolAsync(call, userId, isAdmin, ct),
-            "find_contracts_by_person" => await FindContractsByPersonToolAsync(call, userId, isAdmin, ct),
-            "find_contracts_by_counterparty" => await FindContractsByCounterpartyToolAsync(call, userId, isAdmin, ct),
-            "get_contract"          => await GetContractToolAsync(call, userId, isAdmin, ct),
-            "get_contract_document" => await GetContractDocumentToolAsync(call, userId, isAdmin, ct),
+            "list_contracts"        => await ListContractsToolAsync(userId, isAdmin, references, ct),
+            "find_expiring_contracts" => await FindExpiringContractsToolAsync(call, userId, isAdmin, references, ct),
+            "find_renewal_windows"  => await FindRenewalWindowsToolAsync(call, userId, isAdmin, references, ct),
+            "find_contracts_by_person" => await FindContractsByPersonToolAsync(call, userId, isAdmin, references, ct),
+            "find_contracts_by_counterparty" => await FindContractsByCounterpartyToolAsync(call, userId, isAdmin, references, ct),
+            "get_contract"          => await GetContractToolAsync(call, userId, isAdmin, references, ct),
+            "get_contract_document" => await GetContractDocumentToolAsync(call, userId, isAdmin, references, ct),
             _                       => "Unknown tool",
         };
 
     private async Task<string> ListContractsToolAsync(
-        string userId, bool isAdmin, CancellationToken ct)
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var contracts = await _contractIntelligence.ListContractsAsync(Caller(userId, isAdmin), ct);
+        AddReferences(references, contracts.Take(10));
         return JsonSerializer.Serialize(contracts);
     }
 
     private async Task<string> FindExpiringContractsToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var from = ParseDateArg(call.FunctionArguments, "from");
         var to = ParseDateArg(call.FunctionArguments, "to");
         var contractType = ParseArg(call.FunctionArguments, "contractType");
         var contracts = await _contractIntelligence.FindExpiringAsync(
             Caller(userId, isAdmin), from, to, contractType, ct);
+        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
     private async Task<string> FindRenewalWindowsToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var from = ParseDateArg(call.FunctionArguments, "from");
         var to = ParseDateArg(call.FunctionArguments, "to");
         var contracts = await _contractIntelligence.FindRenewalWindowsAsync(
             Caller(userId, isAdmin), from, to, ct);
+        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
     private async Task<string> FindContractsByPersonToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var personName = ParseArg(call.FunctionArguments, "personName");
         if (personName is null) return "Missing personName argument";
         var contracts = await _contractIntelligence.FindByPersonAsync(
             Caller(userId, isAdmin), personName, ct);
+        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
     private async Task<string> FindContractsByCounterpartyToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var counterparty = ParseArg(call.FunctionArguments, "counterparty");
         if (counterparty is null) return "Missing counterparty argument";
         var contracts = await _contractIntelligence.FindByCounterpartyAsync(
             Caller(userId, isAdmin), counterparty, ct);
+        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
     private async Task<string> GetContractToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var correlationId = ParseArg(call.FunctionArguments, "correlationId");
         if (correlationId is null) return "Missing correlationId argument";
 
         var detail = await _contractIntelligence.GetContractAsync(correlationId, Caller(userId, isAdmin), ct);
         if (detail is null) return "Contract not found";
+        AddReference(references, detail.Summary);
 
         return JsonSerializer.Serialize(new
         {
@@ -221,10 +255,18 @@ public class ContractChatAgent
     }
 
     private async Task<string> GetContractDocumentToolAsync(
-        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
     {
         var correlationId = ParseArg(call.FunctionArguments, "correlationId");
         if (correlationId is null) return "Missing correlationId argument";
+
+        var detail = await _contractIntelligence.GetContractAsync(correlationId, Caller(userId, isAdmin), ct);
+        if (detail is not null)
+            AddReference(references, detail.Summary);
 
         var text = await _contractIntelligence.GetContractDocumentTextAsync(
             correlationId, Caller(userId, isAdmin), ct);
@@ -248,6 +290,24 @@ public class ContractChatAgent
     }
 
     private static ContractCallerContext Caller(string userId, bool isAdmin) => new(userId, isAdmin);
+
+    private static void AddReferences(
+        Dictionary<string, ContractReference> references,
+        IEnumerable<ContractSummary> contracts)
+    {
+        foreach (var contract in contracts)
+            AddReference(references, contract);
+    }
+
+    private static void AddReference(
+        Dictionary<string, ContractReference> references,
+        ContractSummary contract)
+    {
+        references.TryAdd(contract.CorrelationId, new ContractReference(
+            contract.CorrelationId,
+            contract.FileName,
+            contract.DocumentType));
+    }
 
     // ── Chat history ──────────────────────────────────────────────────────────
 
@@ -283,4 +343,7 @@ public class ContractChatAgent
     }
 }
 
-public record ChatResult(string Answer, string ModelUsed);
+public record ChatResult(
+    string Answer,
+    string ModelUsed,
+    IReadOnlyList<ContractReference> References);

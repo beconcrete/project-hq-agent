@@ -40,7 +40,12 @@ public class ContractChatFunction
             context.CancellationToken);
 
         var res = req.CreateResponse();
-        await res.WriteAsJsonAsync(new { answer = result.Answer, modelUsed = result.ModelUsed });
+        await res.WriteAsJsonAsync(new
+        {
+            answer = result.Answer,
+            modelUsed = result.ModelUsed,
+            references = result.References,
+        });
         res.StatusCode = HttpStatusCode.OK;
         return res;
     }
