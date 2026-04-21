@@ -23,7 +23,7 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
   /contract-orchestrator-agent   # HTTP-triggered contract analysis (tool-use pipeline)
   /contract-chat-agent           # (in progress)
 /shared                      # Shared C# library — referenced by api/, functions/, and agents/
-  /HqAgent.Shared            # HqAgent.Shared.csproj — targets net8.0 for broad compatibility
+  /HqAgent.Shared            # HqAgent.Shared.csproj — targets net8.0 for SWA compatibility
   /HqAgent.Shared.Tests      # Unit tests for the shared library
 /infra                       # Infrastructure scripts and config
 /docs                        # Architecture docs
@@ -32,7 +32,7 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 
 ## Shared Library (`shared/HqAgent.Shared`)
 
-`HqAgent.Shared` is a `net8.0` class library referenced by `api/`, `functions/HqAgentFunctions`, `agents/contract-orchestrator-agent`, and `agents/contract-chat-agent`. It contains everything that crosses project boundaries.
+`HqAgent.Shared` targets `net8.0` for compatibility with the SWA-managed `api/` project, because Azure Static Web Apps managed Functions do not support .NET 10. The standalone `agents/` Function App targets `net10.0` and references the shared `net8.0` library. Shared contains everything that crosses project boundaries.
 
 ### What lives in shared
 
@@ -78,8 +78,8 @@ If a task requires an architectural decision to proceed, stop and ask. Do not pi
 ## Architecture Decisions
 
 - **Frontend**: Azure Static Web App (CDN-distributed, free tier) — Vue 3 + Vite, built to `dist/`
-- **API (`/api/`)**: SWA-managed HTTP functions, C# isolated worker. Deployed by the SWA workflow (`api_location: api`). Served at `/api/*`. HTTP triggers only — no blob/queue triggers here.
-- **Functions (`/functions/`)**: Separate Azure Function App (`hq-agent-function-app`, Consumption plan). Background and event-driven work only — blob triggers, queue triggers, timer triggers. Never called directly by the browser.
+- **API (`/api/`)**: SWA-managed HTTP functions, C# isolated worker, currently `net8.0`. Deployed by the SWA workflow (`api_location: api`). Served at `/api/*`. HTTP triggers only — no blob/queue triggers here.
+- **Agents Function App (`/agents/`)**: Separate Azure Function App (`hq-agent-function-app`, Consumption plan), currently `net10.0` isolated worker. Background and agent-driven work only. Never called directly by the browser.
 - **No containers, no App Service, no Container Registry, no Dapr** — all agent logic runs as Azure Functions.
 - **Storage**: Azure Blob (contract files), Queue (work queue), Table (extracted data + alerts)
 - **Real-time**: WebSockets (NOT SignalR, NOT polling)

@@ -12,7 +12,7 @@
 | Resource Group | `hq-agent-resource-group` | Microsoft.Resources/resourceGroups | northeurope | Primary resource group |
 | Storage Account | `hqagentstorage` | Microsoft.Storage/storageAccounts | northeurope | Blob (contracts), Queue (work queue), Table (extracted data + alerts) |
 | Static Web App | `hq-agent-static-web-app` | Microsoft.Web/staticSites | westeurope | SWA only available in westeurope for EU. CDN-distributed globally. URL: `wonderful-ground-0acacb103.7.azurestaticapps.net` |
-| Function App | `hq-agent-function-app` | Microsoft.Web/sites | northeurope | C# isolated worker, Consumption plan (Y1). Hosts all functions and agents — `functions/HqAgentFunctions` and `agents/contract-orchestrator-agent`. |
+| Function App | `hq-agent-function-app` | Microsoft.Web/sites | northeurope | C# isolated worker, .NET 10, Consumption plan (Y1). Hosts the agent functions in `agents/`. |
 | Function App Plan | `NorthEuropePlan` | Microsoft.Web/serverFarms | northeurope | Consumption (Y1) — auto-created with `hq-agent-function-app` |
 | Application Insights | `hq-agent-function-app` | microsoft.insights/components | northeurope | Auto-created with Function App |
 
@@ -47,7 +47,8 @@ Frontend → POST /api/upload-contract
 - **API enqueues directly (pending issue #24)** — after issue #24, `UploadContract` sends the queue message itself. Until then, `ContractBlobTrigger` handles this via blob-event polling.
 - **`hq-agent-function-app` hosts `functions/HqAgentFunctions`** — queue trigger for contract ingestion pipeline. Blob trigger will be removed in issue #24.
 - **One Function App for everything** — both `functions/HqAgentFunctions` and `agents/` deploy to `hq-agent-function-app`. This may be split in the future but requires an explicit architectural decision.
-- **Shared library `HqAgent.Shared`** — `net8.0` class library referenced by `api/`, `functions/`, and `agents/`. Contains `BlobStorageService`, `TableStorageService`, `ContractMessage`, `ExtractionResult`, and normalized contract fact helpers.
+- **Shared library `HqAgent.Shared`** — targets `net8.0` for SWA-managed API compatibility. The standalone `agents/` Function App targets `net10.0` and references the shared `net8.0` library. Contains `BlobStorageService`, `TableStorageService`, `ContractMessage`, `ExtractionResult`, and normalized contract fact helpers.
+- **Runtime split** — `api/` stays on `net8.0` because Azure Static Web Apps managed Functions currently support up to .NET 9 isolated, not .NET 10. `agents/` runs on `net10.0` in the standalone Azure Function App.
 - **SWA uses westeurope** — Azure Static Web Apps are not available in northeurope. Content is CDN-distributed so latency for end users is unaffected.
 - **Function App uses Consumption plan** — scales to zero, ~$0-2/month at low volume.
 - **`AzureWebJobsStorage`** — required by the Functions runtime (lease containers, distributed locks). Does not need to match `hqagentstorage`. After issue #24 removes the BlobTrigger, this setting is purely an internal runtime concern.

@@ -27,6 +27,9 @@
     "X-Frame-Options": "SAMEORIGIN",
     "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' wss: https://*.auth0.com https://id.beconcrete.se"
   },
+  "platform": {
+    "apiRuntime": "dotnet-isolated:8.0"
+  },
   "mimeTypes": {
     ".json": "application/json"
   }
