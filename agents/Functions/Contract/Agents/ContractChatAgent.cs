@@ -17,7 +17,16 @@ public class ContractChatAgent
     private const int    MaxHistoryTurns  = 20;
 
     private const string SystemPromptBase = """
-        You are a contract analyst assistant with access to the user's contract database via tools.
+        You are a contract-domain assistant with access to the user's contract database via tools.
+
+        Only answer questions that are directly about uploaded contracts, agreements,
+        contract parties, dates, expiry, renewal, notice periods, termination,
+        obligations, risks, confidentiality, liability, payment terms, signatures,
+        consulting assignments, people mentioned in contracts, or business planning
+        based on contract data.
+
+        If the question is outside the contract domain, do not answer it. Say:
+        "I can only help with questions about your contracts and contract data."
 
         Use find_expiring_contracts for expiry questions.
         Use find_renewal_windows for notice period, renewal, and action deadline questions.
@@ -91,6 +100,15 @@ public class ContractChatAgent
         bool isAdmin,
         CancellationToken ct)
     {
+        if (!await IsInContractScopeAsync(message, contextCorrelationId is not null, ct))
+        {
+            _logger.LogInformation("Rejected out-of-domain contract chat message for session {SessionId}", sessionId);
+            return new ChatResult(
+                "I can only help with questions about your contracts and contract data.",
+                MiniModel,
+                []);
+        }
+
         var history = await LoadHistoryAsync(sessionId, ct);
 
         var systemPrompt = contextCorrelationId is not null
@@ -137,6 +155,99 @@ public class ContractChatAgent
         await SaveTurnAsync(sessionId, "assistant", answer,  ct);
 
         return new ChatResult(answer, MiniModel, references.Values.ToArray());
+    }
+
+    // ── Scope guardrail ───────────────────────────────────────────────────────
+
+    private async Task<bool> IsInContractScopeAsync(
+        string message,
+        bool hasSelectedContract,
+        CancellationToken ct)
+    {
+        var prompt = $$"""
+            Classify whether the user message is in scope for a contract assistant.
+
+            In scope means the user is asking about uploaded contracts or agreements,
+            terms, parties, dates, expiry, renewal, notice periods, termination,
+            obligations, risks, confidentiality, liability, payment terms, signatures,
+            consulting assignments, people mentioned in contracts, or business planning
+            based on contract data.
+
+            A selected contract may make short references like "this", "it",
+            "the date", "who signed it", or "summarize" in scope when they
+            reasonably refer to the selected contract.
+
+            A selected contract does not make unrelated questions in scope.
+            If the request is not clearly about the contract domain, classify it as out of scope.
+
+            Selected contract present: {{hasSelectedContract}}
+            User message: {{message}}
+
+            Return only JSON:
+            { "inScope": true/false, "reason": "short reason" }
+            """;
+
+        try
+        {
+            var result = await _chatClient.CompleteChatAsync(
+                [
+                    ChatMessage.CreateSystemMessage("You are a precise JSON-only scope classifier."),
+                    ChatMessage.CreateUserMessage(prompt),
+                ],
+                cancellationToken: ct);
+
+            var raw = result.Value.Content.FirstOrDefault()?.Text ?? "";
+            var json = ExtractOutermostJson(raw);
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("inScope", out var inScope) &&
+                inScope.ValueKind is JsonValueKind.True or JsonValueKind.False &&
+                inScope.GetBoolean();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Contract chat scope classification failed; rejecting message");
+            return false;
+        }
+    }
+
+    private static string ExtractOutermostJson(string text)
+    {
+        var searchFrom = 0;
+        while (true)
+        {
+            var start = text.IndexOf('{', searchFrom);
+            if (start == -1) break;
+            var candidate = TryExtractJsonAt(text, start);
+            if (candidate != null)
+            {
+                try { JsonDocument.Parse(candidate); return candidate; }
+                catch (JsonException) { }
+            }
+            searchFrom = start + 1;
+        }
+
+        throw new JsonException("No JSON object found in scope classifier response.");
+    }
+
+    private static string? TryExtractJsonAt(string text, int start)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+
+        for (var i = start; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (escaped) { escaped = false; continue; }
+            if (c == '\\' && inString) { escaped = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0)
+                return text[start..(i + 1)];
+        }
+
+        return null;
     }
 
     // ── Tools ─────────────────────────────────────────────────────────────────
