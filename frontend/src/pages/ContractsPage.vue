@@ -81,7 +81,7 @@
           >
             <button
               v-for="ref in msg.references"
-              :key="ref.correlationId"
+              :key="referenceCorrelationId(ref)"
               class="chat-reference"
               @click="openContractReference(ref)"
             >
@@ -96,7 +96,7 @@
                 />
                 <polyline points="14 2 14 8 20 8" />
               </svg>
-              <span>{{ ref.fileName || ref.documentType || "Contract" }}</span>
+              <span>{{ referenceLabel(ref) }}</span>
             </button>
           </div>
           <span
@@ -721,11 +721,13 @@ function clearChat() {
 }
 
 async function openContractReference(ref) {
-  if (!ref?.correlationId) return;
+  const correlationId = referenceCorrelationId(ref);
+  if (!correlationId) return;
+  const tab = window.open("", "_blank");
   try {
     const res = await fetch(
       `/api/get-contract-download-url?correlationId=${encodeURIComponent(
-        ref.correlationId,
+        correlationId,
       )}`,
       {
         headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
@@ -733,8 +735,11 @@ async function openContractReference(ref) {
     );
     if (!res.ok) throw new Error(`Download URL failed (${res.status})`);
     const data = await res.json();
-    if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    if (!data.url) throw new Error("Missing download URL");
+    if (tab) tab.location.href = data.url;
+    else window.location.href = data.url;
   } catch {
+    if (tab) tab.close();
     chatMessages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
@@ -742,6 +747,20 @@ async function openContractReference(ref) {
       error: true,
     });
   }
+}
+
+function referenceCorrelationId(ref) {
+  return ref?.correlationId ?? ref?.CorrelationId ?? "";
+}
+
+function referenceLabel(ref) {
+  return (
+    ref?.fileName ??
+    ref?.FileName ??
+    ref?.documentType ??
+    ref?.DocumentType ??
+    "Contract"
+  );
 }
 
 function scrollChatToBottom() {

@@ -44,7 +44,12 @@ public class ContractChatFunction
         {
             answer = result.Answer,
             modelUsed = result.ModelUsed,
-            references = result.References,
+            references = result.References.Select(r => new
+            {
+                correlationId = r.CorrelationId,
+                fileName = r.FileName,
+                documentType = r.DocumentType,
+            }),
         });
         res.StatusCode = HttpStatusCode.OK;
         return res;
