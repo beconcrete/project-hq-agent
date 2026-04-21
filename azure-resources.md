@@ -23,7 +23,7 @@
 | Blob Container | `contracts` | Uploaded contract files (PDF, DOCX) |
 | Queue | `contract-processing` | Work queue — ContractIngestion function reads from here |
 | Queue | `contract-completed` | Completion notifications — written after processing, consumed by WebSocket handler (future) |
-| Table | `ContractExtractions` | Extracted contract fields — open schema, `status` is `completed` or `pending_review` |
+| Table | `Contracts` | Contract records with open extraction JSON plus normalized query fields (dates, parties, people, renewal, risk), `status` is `completed` or `pending_review` |
 | Table | `ContractAlerts` | Contract expiry alerts — written by timer function, read by /api/contract-alerts |
 
 ## Ingestion flow
@@ -37,7 +37,7 @@ Frontend → POST /api/upload-contract
 
   → [hq-agent-function-app] ContractIngestion queue trigger fires
   → triage (fast model) + extraction (quality model)
-  → writes ExtractionResult to ContractExtractions table
+  → writes contract record / ExtractionResult + normalized facts to Contracts table
   → sends completion notification to contract-completed queue
 ```
 
@@ -47,7 +47,7 @@ Frontend → POST /api/upload-contract
 - **API enqueues directly (pending issue #24)** — after issue #24, `UploadContract` sends the queue message itself. Until then, `ContractBlobTrigger` handles this via blob-event polling.
 - **`hq-agent-function-app` hosts `functions/HqAgentFunctions`** — queue trigger for contract ingestion pipeline. Blob trigger will be removed in issue #24.
 - **One Function App for everything** — both `functions/HqAgentFunctions` and `agents/` deploy to `hq-agent-function-app`. This may be split in the future but requires an explicit architectural decision.
-- **Shared library `HqAgent.Shared`** — `net8.0` class library referenced by `api/`, `functions/`, and `agents/`. Contains `BlobStorageService`, `TableStorageService`, `ContractMessage`, `ExtractionResult`, `IAIModelClient`.
+- **Shared library `HqAgent.Shared`** — `net8.0` class library referenced by `api/`, `functions/`, and `agents/`. Contains `BlobStorageService`, `TableStorageService`, `ContractMessage`, `ExtractionResult`, and normalized contract fact helpers.
 - **SWA uses westeurope** — Azure Static Web Apps are not available in northeurope. Content is CDN-distributed so latency for end users is unaffected.
 - **Function App uses Consumption plan** — scales to zero, ~$0-2/month at low volume.
 - **`AzureWebJobsStorage`** — required by the Functions runtime (lease containers, distributed locks). Does not need to match `hqagentstorage`. After issue #24 removes the BlobTrigger, this setting is purely an internal runtime concern.

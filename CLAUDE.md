@@ -38,15 +38,14 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 
 | Namespace | Contents |
 |---|---|
-| `HqAgent.Shared.Models` | `ContractMessage` (queue message), `ExtractionResult` (open-ended), `ContractExtractionEntity` (Table entity) |
-| `HqAgent.Shared.Storage` | `BlobStorageService` (download blobs), `TableStorageService` (write/read `ContractExtractions`) |
-| `HqAgent.Shared.Abstractions` | `IAIModelClient` (interface for AI model calls; implemented by `AnthropicHttpClient` in agents) |
+| `HqAgent.Shared.Models` | `ContractMessage` (queue message), `ExtractionResult` (open-ended), `ContractExtractionEntity` (Table entity), normalized contract fact helpers |
+| `HqAgent.Shared.Storage` | `BlobStorageService` (download blobs), `TableStorageService` (write/read `Contracts`) |
 
 ### Rules
 
 - **Never duplicate** `BlobStorageService`, `TableStorageService`, `ExtractionResult`, or `ContractMessage` in any project — always reference shared.
-- `IAIModelClient` is the injection point for AI calls in agents. DI registers: `AddHttpClient<IAIModelClient, AnthropicHttpClient>()`.
 - `ExtractionResult` uses an open `Dictionary<string, JsonElement>` for extracted fields — no fixed schema. The model decides what fields are relevant.
+- `Contracts` stores both the full open extraction JSON and normalized query fields such as expiry date, notice deadline, counterparties, people, renewal status, assignment dates, and risk flags.
 - `TableStorageService.WriteExtractionAsync` automatically sets `status = "pending_review"` when `ExtractionResult.PendingReview = true`.
 
 ### CI/CD — shared triggers all three pipelines
@@ -191,6 +190,13 @@ See [docs/MAF.md](./docs/MAF.md) for patterns, gotchas, and working examples cov
 - Shared `ChatHistoryProvider` on all agents in a workflow so they see each other's messages
 - Tools: `[Description]` attribute + `AIFunctionFactory.Create(method)`
 - What to persist vs skip in `StoreChatHistoryAsync` (never persist tool call/result pairs)
+
+### Current Contract agent shape
+
+- `ContractOrchestratorAgent` uses MAF for queue-triggered ingestion: triage → extraction.
+- `ContractChatAgent` intentionally uses a direct OpenAI tool-calling loop for interactive chat, but its tools delegate to `IContractIntelligence` instead of owning storage queries directly.
+- `IContractIntelligence` is the internal capability layer future agents should call for contract questions such as expiring contracts, renewal windows, people/person impact, counterparty lookup, and document fallback.
+- `DocumentTextExtractor` is shared by ingestion and chat document fallback. It extracts PDF text through OpenAI file input and DOCX text locally from `word/document.xml`.
 
 ## GitHub Workflows
 

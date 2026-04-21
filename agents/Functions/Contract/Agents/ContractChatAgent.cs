@@ -1,9 +1,8 @@
-using System.Text;
 using System.Text.Json;
 using Azure;
 using Azure.Data.Tables;
+using HqAgent.Agents.Contract.Services;
 using HqAgent.Shared.Models;
-using HqAgent.Shared.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenAI;
@@ -20,7 +19,11 @@ public class ContractChatAgent
     private const string SystemPromptBase = """
         You are a contract analyst assistant with access to the user's contract database via tools.
 
-        Use list_contracts to find contracts or answer cross-contract questions (e.g. "which contracts expire next month").
+        Use find_expiring_contracts for expiry questions.
+        Use find_renewal_windows for notice period, renewal, and action deadline questions.
+        Use find_contracts_by_person when the question names an employee, consultant, contact, or signatory.
+        Use find_contracts_by_counterparty when the question names a customer, supplier, vendor, or other party.
+        Use list_contracts to inspect the visible contract portfolio.
         Use get_contract to retrieve extracted fields for a specific contract.
         Use get_contract_document only when extracted fields lack the detail needed to answer the question.
 
@@ -32,11 +35,27 @@ public class ContractChatAgent
     [
         ChatTool.CreateFunctionTool(
             "list_contracts",
-            "List all contracts accessible to the current user with metadata (type, filename, status, dates).",
+            "List all contracts accessible to the current user with normalized metadata, dates, parties, people, and risk flags.",
             BinaryData.FromString("""{"type":"object","properties":{},"required":[]}""")),
         ChatTool.CreateFunctionTool(
+            "find_expiring_contracts",
+            "Find contracts expiring in a date range. Defaults to the next 90 days when dates are omitted.",
+            BinaryData.FromString("""{"type":"object","properties":{"from":{"type":"string","description":"Optional start date, ISO yyyy-MM-dd"},"to":{"type":"string","description":"Optional end date, ISO yyyy-MM-dd"},"contractType":{"type":"string","description":"Optional contract type filter, e.g. NDA or consulting"}},"required":[]}""")),
+        ChatTool.CreateFunctionTool(
+            "find_renewal_windows",
+            "Find contracts with notice deadlines, renewal windows, or expiry action dates in a date range.",
+            BinaryData.FromString("""{"type":"object","properties":{"from":{"type":"string","description":"Optional start date, ISO yyyy-MM-dd"},"to":{"type":"string","description":"Optional end date, ISO yyyy-MM-dd"}},"required":[]}""")),
+        ChatTool.CreateFunctionTool(
+            "find_contracts_by_person",
+            "Find contracts that mention or affect an employee, consultant, contact, owner, or signatory.",
+            BinaryData.FromString("""{"type":"object","properties":{"personName":{"type":"string","description":"The person name to search for"}},"required":["personName"]}""")),
+        ChatTool.CreateFunctionTool(
+            "find_contracts_by_counterparty",
+            "Find contracts by customer, supplier, vendor, client, or other counterparty name.",
+            BinaryData.FromString("""{"type":"object","properties":{"counterparty":{"type":"string","description":"The counterparty name to search for"}},"required":["counterparty"]}""")),
+        ChatTool.CreateFunctionTool(
             "get_contract",
-            "Get the extracted fields for a specific contract by its correlation ID.",
+            "Get normalized facts and extracted fields for a specific contract by its correlation ID.",
             BinaryData.FromString("""{"type":"object","properties":{"correlationId":{"type":"string","description":"The contract correlation ID"}},"required":["correlationId"]}""")),
         ChatTool.CreateFunctionTool(
             "get_contract_document",
@@ -45,30 +64,23 @@ public class ContractChatAgent
     ];
 
     private readonly ChatClient          _chatClient;
-    private readonly IHttpClientFactory  _httpFactory;
-    private readonly string              _apiKey;
     private readonly TableServiceClient  _tableClient;
-    private readonly TableStorageService _tableStorage;
-    private readonly BlobStorageService  _blobs;
+    private readonly IContractIntelligence _contractIntelligence;
     private readonly ILogger<ContractChatAgent> _logger;
 
     public ContractChatAgent(
-        IHttpClientFactory         httpFactory,
         TableServiceClient         tableClient,
-        TableStorageService        tableStorage,
-        BlobStorageService         blobs,
+        IContractIntelligence      contractIntelligence,
         IConfiguration             config,
         ILogger<ContractChatAgent> logger)
     {
-        _httpFactory  = httpFactory;
         _tableClient  = tableClient;
-        _tableStorage = tableStorage;
-        _blobs        = blobs;
+        _contractIntelligence = contractIntelligence;
         _logger       = logger;
-        _apiKey       = config["OPENAI_API_KEY"]
+        var apiKey    = config["OPENAI_API_KEY"]
             ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
 
-        _chatClient = new OpenAIClient(_apiKey).GetChatClient(MiniModel);
+        _chatClient = new OpenAIClient(apiKey).GetChatClient(MiniModel);
     }
 
     public async Task<ChatResult> ChatAsync(
@@ -133,6 +145,10 @@ public class ContractChatAgent
         call.FunctionName switch
         {
             "list_contracts"        => await ListContractsToolAsync(userId, isAdmin, ct),
+            "find_expiring_contracts" => await FindExpiringContractsToolAsync(call, userId, isAdmin, ct),
+            "find_renewal_windows"  => await FindRenewalWindowsToolAsync(call, userId, isAdmin, ct),
+            "find_contracts_by_person" => await FindContractsByPersonToolAsync(call, userId, isAdmin, ct),
+            "find_contracts_by_counterparty" => await FindContractsByCounterpartyToolAsync(call, userId, isAdmin, ct),
             "get_contract"          => await GetContractToolAsync(call, userId, isAdmin, ct),
             "get_contract_document" => await GetContractDocumentToolAsync(call, userId, isAdmin, ct),
             _                       => "Unknown tool",
@@ -141,16 +157,49 @@ public class ContractChatAgent
     private async Task<string> ListContractsToolAsync(
         string userId, bool isAdmin, CancellationToken ct)
     {
-        var contracts = await _tableStorage.ListExtractionsAsync(isAdmin ? null : userId, ct);
-        var summary = contracts.Select(e => new
-        {
-            correlationId = e.PartitionKey,
-            documentType  = e.DocumentType,
-            fileName      = e.FileName,
-            status        = e.Status,
-            uploadedAt    = e.UploadedAt,
-        });
-        return JsonSerializer.Serialize(summary);
+        var contracts = await _contractIntelligence.ListContractsAsync(Caller(userId, isAdmin), ct);
+        return JsonSerializer.Serialize(contracts);
+    }
+
+    private async Task<string> FindExpiringContractsToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+    {
+        var from = ParseDateArg(call.FunctionArguments, "from");
+        var to = ParseDateArg(call.FunctionArguments, "to");
+        var contractType = ParseArg(call.FunctionArguments, "contractType");
+        var contracts = await _contractIntelligence.FindExpiringAsync(
+            Caller(userId, isAdmin), from, to, contractType, ct);
+        return JsonSerializer.Serialize(contracts);
+    }
+
+    private async Task<string> FindRenewalWindowsToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+    {
+        var from = ParseDateArg(call.FunctionArguments, "from");
+        var to = ParseDateArg(call.FunctionArguments, "to");
+        var contracts = await _contractIntelligence.FindRenewalWindowsAsync(
+            Caller(userId, isAdmin), from, to, ct);
+        return JsonSerializer.Serialize(contracts);
+    }
+
+    private async Task<string> FindContractsByPersonToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+    {
+        var personName = ParseArg(call.FunctionArguments, "personName");
+        if (personName is null) return "Missing personName argument";
+        var contracts = await _contractIntelligence.FindByPersonAsync(
+            Caller(userId, isAdmin), personName, ct);
+        return JsonSerializer.Serialize(contracts);
+    }
+
+    private async Task<string> FindContractsByCounterpartyToolAsync(
+        ChatToolCall call, string userId, bool isAdmin, CancellationToken ct)
+    {
+        var counterparty = ParseArg(call.FunctionArguments, "counterparty");
+        if (counterparty is null) return "Missing counterparty argument";
+        var contracts = await _contractIntelligence.FindByCounterpartyAsync(
+            Caller(userId, isAdmin), counterparty, ct);
+        return JsonSerializer.Serialize(contracts);
     }
 
     private async Task<string> GetContractToolAsync(
@@ -159,11 +208,16 @@ public class ContractChatAgent
         var correlationId = ParseArg(call.FunctionArguments, "correlationId");
         if (correlationId is null) return "Missing correlationId argument";
 
-        var entity = await _tableStorage.GetExtractionAsync(correlationId, ct);
-        if (entity is null) return "Contract not found";
-        if (!isAdmin && entity.UserId != userId) return "Access denied";
+        var detail = await _contractIntelligence.GetContractAsync(correlationId, Caller(userId, isAdmin), ct);
+        if (detail is null) return "Contract not found";
 
-        return string.IsNullOrEmpty(entity.Fields) ? "{}" : entity.Fields;
+        return JsonSerializer.Serialize(new
+        {
+            detail.Summary,
+            extracted = string.IsNullOrEmpty(detail.ExtractedFieldsJson)
+                ? (JsonElement?)null
+                : JsonSerializer.Deserialize<JsonElement>(detail.ExtractedFieldsJson),
+        });
     }
 
     private async Task<string> GetContractDocumentToolAsync(
@@ -172,11 +226,8 @@ public class ContractChatAgent
         var correlationId = ParseArg(call.FunctionArguments, "correlationId");
         if (correlationId is null) return "Missing correlationId argument";
 
-        var entity = await _tableStorage.GetExtractionAsync(correlationId, ct);
-        if (entity is null) return "Contract not found";
-        if (!isAdmin && entity.UserId != userId) return "Access denied";
-
-        var text = await FetchDocumentTextAsync(entity, ct);
+        var text = await _contractIntelligence.GetContractDocumentTextAsync(
+            correlationId, Caller(userId, isAdmin), ct);
         return text ?? "Could not retrieve document";
     }
 
@@ -190,79 +241,13 @@ public class ContractChatAgent
         catch { return null; }
     }
 
-    // ── Document fetch ────────────────────────────────────────────────────────
-
-    private async Task<string?> FetchDocumentTextAsync(
-        ContractExtractionEntity entity, CancellationToken ct)
+    private static DateOnly? ParseDateArg(BinaryData args, string key)
     {
-        try
-        {
-            var (bytes, contentType) = await _blobs.DownloadAsync("contracts", entity.BlobPath, ct);
-            var isPdf = contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase)
-                || entity.BlobPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
-            return isPdf
-                ? await ExtractPdfTextAsync(bytes, ct)
-                : Encoding.UTF8.GetString(bytes);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not fetch document for {BlobPath}", entity.BlobPath);
-            return null;
-        }
+        var value = ParseArg(args, key);
+        return DateOnly.TryParse(value, out var date) ? date : null;
     }
 
-    private async Task<string> ExtractPdfTextAsync(byte[] pdfBytes, CancellationToken ct)
-    {
-        var body = JsonSerializer.Serialize(new
-        {
-            model      = MiniModel,
-            max_tokens = 8192,
-            messages = new[]
-            {
-                new
-                {
-                    role    = "user",
-                    content = new object[]
-                    {
-                        new
-                        {
-                            type = "file",
-                            file = new
-                            {
-                                filename  = "document.pdf",
-                                file_data = $"data:application/pdf;base64,{Convert.ToBase64String(pdfBytes)}",
-                            }
-                        },
-                        new { type = "text", text = "Extract all text content from this document verbatim, preserving structure. No commentary." }
-                    }
-                }
-            }
-        });
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-        req.Headers.Add("Authorization", $"Bearer {_apiKey}");
-        req.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-        var http = _httpFactory.CreateClient();
-        using var resp = await http.SendAsync(req, ct);
-
-        if (!resp.IsSuccessStatusCode)
-        {
-            var err = await resp.Content.ReadAsStringAsync(ct);
-            _logger.LogError("OpenAI PDF extraction error {Status}: {Body}", resp.StatusCode, err);
-            throw new HttpRequestException($"OpenAI returned {(int)resp.StatusCode}: {err}");
-        }
-
-        var json = await resp.Content.ReadAsStringAsync(ct);
-        var text = JsonDocument.Parse(json).RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString() ?? "";
-
-        _logger.LogInformation("PDF text extracted: {CharCount} chars", text.Length);
-        return text;
-    }
+    private static ContractCallerContext Caller(string userId, bool isAdmin) => new(userId, isAdmin);
 
     // ── Chat history ──────────────────────────────────────────────────────────
 

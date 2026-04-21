@@ -32,10 +32,10 @@ for QUEUE in contract-processing contract-processing-poison; do
 done
 
 # --- Table ---
-echo "Deleting ContractExtractions table (will be recreated on next write)..."
-TABLE_EXISTS=$(az storage table exists "${ARGS[@]}" --name ContractExtractions --query "exists" -o tsv 2>/dev/null || echo "false")
+echo "Deleting Contracts table (will be recreated on next write)..."
+TABLE_EXISTS=$(az storage table exists "${ARGS[@]}" --name Contracts --query "exists" -o tsv 2>/dev/null || echo "false")
 if [ "$TABLE_EXISTS" = "true" ]; then
-  az storage table delete "${ARGS[@]}" --name ContractExtractions
+  az storage table delete "${ARGS[@]}" --name Contracts
   echo "  Deleted. Azure will recreate it on first write."
 else
   echo "  Table does not exist, nothing to delete."

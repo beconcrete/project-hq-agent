@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using HqAgent.Agents.Models;
+using HqAgent.Agents.Services;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Agents.AI;
@@ -20,7 +20,7 @@ namespace HqAgent.Agents.Contract.Agents;
 public class ContractOrchestratorAgent
 {
     private readonly BlobStorageService _blobs;
-    private readonly IHttpClientFactory _httpFactory;
+    private readonly DocumentTextExtractor _textExtractor;
     private readonly string _apiKey;
     private readonly ILogger<ContractOrchestratorAgent> _logger;
 
@@ -58,6 +58,15 @@ public class ContractOrchestratorAgent
         noticePeriodDays (integer), governingLaw, keyObligations (array), autoRenewal (boolean),
         riskFlags (array) — include whatever is most relevant for this document.
 
+        For consulting agreements, prioritize: customer/client, supplier/vendor, consultantNames,
+        assignmentTitle, assignmentDescription, assignmentStartDate, assignmentEndDate, workloadPercent,
+        hourlyRate or dailyRate, currency, invoicingTerms, paymentTerms, customerContact,
+        internalOwner, extensionOption, terminationTerms, ipOwnership, nonSolicitation.
+
+        For NDAs, prioritize: parties, mutualOrOneWay, effectiveDate, expiryDate,
+        confidentialityPeriod, survivalPeriod, purpose, permittedDisclosures,
+        returnOrDestructionObligation, governingLaw, jurisdiction, signatories.
+
         Output ONLY this JSON object, no markdown, no code fences, no other text:
         {
           "documentType": "<document type from triage>",
@@ -71,12 +80,12 @@ public class ContractOrchestratorAgent
 
     public ContractOrchestratorAgent(
         BlobStorageService blobs,
-        IHttpClientFactory httpFactory,
+        DocumentTextExtractor textExtractor,
         IConfiguration config,
         ILoggerFactory loggerFactory)
     {
         _blobs       = blobs;
-        _httpFactory = httpFactory;
+        _textExtractor = textExtractor;
         _logger      = loggerFactory.CreateLogger<ContractOrchestratorAgent>();
 
         _apiKey = config["OPENAI_API_KEY"]
@@ -139,72 +148,10 @@ public class ContractOrchestratorAgent
     private async Task<ChatMessage> BuildMessageAsync(ContractMessage msg, CancellationToken ct)
     {
         var (bytes, contentType) = await _blobs.DownloadAsync(msg.ContainerName, msg.BlobName, ct);
-
-        string text;
-        if (IsPdf(contentType, msg.BlobName))
-            text = await ExtractPdfTextAsync(bytes, ct);
-        else
-            text = Encoding.UTF8.GetString(bytes);
+        var text = await _textExtractor.ExtractAsync(bytes, contentType, msg.BlobName, ct);
 
         return new ChatMessage(ChatRole.User, [new TextContent(text)]);
     }
-
-    private async Task<string> ExtractPdfTextAsync(byte[] pdfBytes, CancellationToken ct)
-    {
-        var body = JsonSerializer.Serialize(new
-        {
-            model      = TriageModel,
-            max_tokens = 8192,
-            messages = new[]
-            {
-                new
-                {
-                    role    = "user",
-                    content = new object[]
-                    {
-                        new
-                        {
-                            type = "file",
-                            file = new
-                            {
-                                filename  = "document.pdf",
-                                file_data = $"data:application/pdf;base64,{Convert.ToBase64String(pdfBytes)}",
-                            }
-                        },
-                        new { type = "text", text = "Extract all text content from this document verbatim, preserving structure. No commentary." }
-                    }
-                }
-            }
-        });
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-        req.Headers.Add("Authorization", $"Bearer {_apiKey}");
-        req.Content = new StringContent(body, Encoding.UTF8, "application/json");
-
-        var http = _httpFactory.CreateClient();
-        using var resp = await http.SendAsync(req, ct);
-
-        if (!resp.IsSuccessStatusCode)
-        {
-            var err = await resp.Content.ReadAsStringAsync(ct);
-            _logger.LogError("OpenAI PDF extraction error {Status}: {Body}", resp.StatusCode, err);
-            throw new HttpRequestException($"OpenAI returned {(int)resp.StatusCode}: {err}");
-        }
-
-        var json = await resp.Content.ReadAsStringAsync(ct);
-        var text = JsonDocument.Parse(json).RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString() ?? "";
-
-        _logger.LogInformation("PDF text extracted: {CharCount} chars", text.Length);
-        return text;
-    }
-
-    private static bool IsPdf(string contentType, string blobName) =>
-        contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase) ||
-        blobName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
 
     private static ExtractionResult ParseExtraction(string raw)
     {

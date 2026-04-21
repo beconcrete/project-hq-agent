@@ -49,6 +49,15 @@ public class ListContracts
             uploadedAt    = e.UploadedAt,
             status        = e.Status,
             documentType  = e.DocumentType,
+            effectiveDate = e.EffectiveDate,
+            expiryDate    = e.ExpiryDate,
+            noticeDeadline = e.NoticeDeadline,
+            noticePeriodDays = e.NoticePeriodDays,
+            autoRenewal   = e.AutoRenewal,
+            primaryCounterparty = e.PrimaryCounterparty,
+            customerName  = e.CustomerName,
+            assignmentStartDate = e.AssignmentStartDate,
+            assignmentEndDate = e.AssignmentEndDate,
         });
 
         var res = req.CreateResponse();

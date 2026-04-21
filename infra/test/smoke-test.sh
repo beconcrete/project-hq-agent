@@ -5,7 +5,7 @@
 #   1. Prompts you to pick a sample contract (consulting-assignment or nda)
 #   2. Uploads it to Blob Storage at contracts/{correlationId}/{file}
 #   3. Waits for the blob trigger to fire and peeks the queue for the message
-#   4. Polls ContractExtractions table until the extraction record appears
+#   4. Polls Contracts table until the extraction record appears
 #
 # Prerequisites:
 #   - az CLI installed and logged in (az login)
@@ -19,7 +19,7 @@ RESOURCE_GROUP="hq-agent-resource-group"
 STORAGE_ACCOUNT="hqagentstorage"
 CONTAINER="contracts"
 QUEUE="contract-processing"
-TABLE="ContractExtractions"
+TABLE="Contracts"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ─── Colours ─────────────────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ fi
 
 # ─── Poll Table Storage ───────────────────────────────────────────────────────
 
-hdr "4/4  Polling ContractExtractions table"
+hdr "4/4  Polling Contracts table"
 info "PartitionKey = $CORRELATION_ID  |  RowKey = extraction"
 info "Polling every 5 seconds, up to 120 seconds..."
 echo ""

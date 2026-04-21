@@ -1,6 +1,8 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using HqAgent.Agents.Contract.Agents;
+using HqAgent.Agents.Contract.Services;
+using HqAgent.Agents.Services;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +25,8 @@ var host = new HostBuilder()
         services.AddSingleton(new TableServiceClient(storageConnection));
         services.AddSingleton<BlobStorageService>();
         services.AddSingleton<TableStorageService>();
+        services.AddSingleton<DocumentTextExtractor>();
+        services.AddSingleton<IContractIntelligence, ContractIntelligence>();
 
         services.AddSingleton<ContractOrchestratorAgent>();
         services.AddSingleton<ContractChatAgent>();

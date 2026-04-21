@@ -222,6 +222,12 @@ public ContractIngestion(OpenAIContractWorkflow workflow, ...)
 
 Only needed for interactive chat sessions where agents must see each other's messages across turns or requests.
 
+### Contract chat decision
+
+`ContractOrchestratorAgent` uses MAF because ingestion is a bounded triage → extraction workflow where handoff is valuable.
+
+`ContractChatAgent` currently remains a direct OpenAI tool-calling loop. That is intentional for now: interactive chat needs persisted user/assistant turns and pragmatic tool execution, while reusable behavior lives below it in `IContractIntelligence`. Future agents should call `IContractIntelligence` for deterministic contract capabilities, and the chat agent should be viewed as a frontend conversational layer over those same capabilities.
+
 ```csharp
 var historyProvider = new MyChatHistoryProvider(...);
 

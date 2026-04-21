@@ -81,6 +81,23 @@ public class GetContract
             status         = entity.Status,
             documentType   = entity.DocumentType,
             triageConfidence = entity.TriageConfidence,
+            extractionConfidence = entity.ExtractionConfidence,
+            facts = new
+            {
+                entity.EffectiveDate,
+                entity.ExpiryDate,
+                entity.NoticeDeadline,
+                entity.NoticePeriodDays,
+                entity.AutoRenewal,
+                entity.PrimaryCounterparty,
+                counterpartyNames = JsonList(entity.CounterpartyNames),
+                peopleMentioned = JsonList(entity.PeopleMentioned),
+                entity.CustomerName,
+                entity.AssignmentStartDate,
+                entity.AssignmentEndDate,
+                riskFlags = JsonList(entity.RiskFlags),
+                missingFields = JsonList(entity.MissingFields),
+            },
             fields,
         });
         okRes.StatusCode = HttpStatusCode.OK;
@@ -94,5 +111,14 @@ public class GetContract
         await res.WriteStringAsync(message);
         res.StatusCode = status;
         return res;
+    }
+
+    private static IReadOnlyList<string> JsonList(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try { return JsonSerializer.Deserialize<string[]>(json) ?? []; }
+        catch (JsonException) { return []; }
     }
 }

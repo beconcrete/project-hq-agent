@@ -10,7 +10,7 @@ public class TableStorageService
 {
     private readonly TableServiceClient _client;
     private readonly ILogger<TableStorageService> _logger;
-    private const string TableName = "ContractExtractions";
+    private const string TableName = "Contracts";
 
     public TableStorageService(TableServiceClient client, ILogger<TableStorageService> logger)
     {
@@ -23,6 +23,7 @@ public class TableStorageService
         ExtractionResult  extraction,
         CancellationToken ct = default)
     {
+        var facts = ContractFactsExtractor.Extract(extraction);
         var entity = new ContractExtractionEntity
         {
             PartitionKey     = message.CorrelationId,
@@ -33,6 +34,20 @@ public class TableStorageService
             UploadedAt       = message.UploadedAt,
             DocumentType     = extraction.DocumentType,
             TriageConfidence = extraction.TriageConfidence,
+            ExtractionConfidence = extraction.ExtractionConfidence,
+            EffectiveDate    = facts.EffectiveDate,
+            ExpiryDate       = facts.ExpiryDate,
+            NoticePeriodDays = facts.NoticePeriodDays,
+            NoticeDeadline   = facts.NoticeDeadline,
+            AutoRenewal      = facts.AutoRenewal,
+            PrimaryCounterparty = facts.PrimaryCounterparty,
+            CounterpartyNames = JsonSerializer.Serialize(facts.CounterpartyNames),
+            PeopleMentioned  = JsonSerializer.Serialize(facts.PeopleMentioned),
+            CustomerName     = facts.CustomerName,
+            AssignmentStartDate = facts.AssignmentStartDate,
+            AssignmentEndDate = facts.AssignmentEndDate,
+            RiskFlags        = JsonSerializer.Serialize(facts.RiskFlags),
+            MissingFields    = JsonSerializer.Serialize(facts.MissingFields),
             Fields           = JsonSerializer.Serialize(extraction),
             ModelUsed        = extraction.ModelUsed,
             ProcessedAt      = DateTime.UtcNow,
