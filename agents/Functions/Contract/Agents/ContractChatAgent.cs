@@ -164,6 +164,11 @@ public class ContractChatAgent
         bool hasSelectedContract,
         CancellationToken ct)
     {
+        if (IsObviousContractDomainMessage(message))
+        {
+            return true;
+        }
+
         var prompt = $$"""
             Classify whether the user message is in scope for a contract assistant.
 
@@ -176,6 +181,13 @@ public class ContractChatAgent
             A selected contract may make short references like "this", "it",
             "the date", "who signed it", or "summarize" in scope when they
             reasonably refer to the selected contract.
+
+            Examples that are in scope:
+            - What contracts do we have for Bjorn Eriksen?
+            - Which agreements mention this employee?
+            - Do we have an NDA with Microsoft Sweden?
+            - List contracts for Spotify.
+            - Which consulting assignments expire next?
 
             A selected contract does not make unrelated questions in scope.
             If the request is not clearly about the contract domain, classify it as out of scope.
@@ -208,6 +220,48 @@ public class ContractChatAgent
             _logger.LogWarning(ex, "Contract chat scope classification failed; rejecting message");
             return false;
         }
+    }
+
+    private static bool IsObviousContractDomainMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalized = message.Trim().ToLowerInvariant();
+
+        var hasContractTerm =
+            normalized.Contains("contract") ||
+            normalized.Contains("agreement") ||
+            normalized.Contains("nda") ||
+            normalized.Contains("consulting assignment") ||
+            normalized.Contains("consulting assignments");
+
+        if (!hasContractTerm)
+        {
+            return false;
+        }
+
+        var hasContractSearchIntent =
+            normalized.Contains("what ") ||
+            normalized.Contains("which ") ||
+            normalized.Contains("list ") ||
+            normalized.Contains("show ") ||
+            normalized.Contains("find ") ||
+            normalized.Contains("search ") ||
+            normalized.Contains("do we have") ||
+            normalized.Contains("does ") ||
+            normalized.Contains("for ") ||
+            normalized.Contains("with ") ||
+            normalized.Contains("mention") ||
+            normalized.Contains("affect") ||
+            normalized.Contains("involve") ||
+            normalized.Contains("expire") ||
+            normalized.Contains("expiry") ||
+            normalized.Contains("renew");
+
+        return hasContractSearchIntent;
     }
 
     private static string ExtractOutermostJson(string text)
