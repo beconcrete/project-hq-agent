@@ -93,7 +93,7 @@ private static string ExtractOutermostJson(string text)
 
 `TryExtractJsonAt` counts braces to find the balanced end of a JSON object. The outer loop tries each `{` in order. The first one that is both brace-balanced AND parses as valid JSON is the outermost result object.
 
-See `agents/contract-orchestrator-agent/Services/OpenAIContractWorkflow.cs` for the full implementation.
+See `agents/Functions/Contract/Agents/ContractOrchestratorAgent.cs` for the full implementation.
 
 ---
 
@@ -202,6 +202,18 @@ public async Task<ExtractionResult> RunAsync(ContractMessage msg, CancellationTo
 
 The `IChatClient` instances (`_triageChatClient`, `_extractionChatClient`) can be long-lived singletons — only the workflow and agents need to be scoped per invocation.
 
+## Checklist for a new MAF workflow
+
+- Keep the workflow bounded and job-like. Use MAF when handoff between specialist agents adds value.
+- Use OpenAI chat clients; do not introduce Anthropic for handoff workflows.
+- Create agents and `AgentWorkflowBuilder` inside the invocation so history is isolated per job.
+- Use a stable `sessionId`, normally the job correlation ID.
+- Emit a single parseable JSON object for structured jobs.
+- Parse the first brace-balanced JSON object, not the last nested object.
+- Keep the `MAAIW001` suppression around `AgentWorkflowBuilder` handoff code.
+- Add a unit test for any parser/normalizer that consumes workflow output.
+- Document the new workflow in this file before adding future domains.
+
 ---
 
 ## Agent registration — no interface needed for single implementations
@@ -210,10 +222,10 @@ If there is only one implementation of a workflow service, register it directly 
 
 ```csharp
 // Program.cs
-services.AddSingleton<OpenAIContractWorkflow>();
+services.AddSingleton<ContractOrchestratorAgent>();
 
 // ContractIngestion.cs
-public ContractIngestion(OpenAIContractWorkflow workflow, ...)
+public ContractIngestion(ContractOrchestratorAgent orchestrator, ...)
 ```
 
 ---

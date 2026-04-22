@@ -56,7 +56,8 @@ public class ContractOrchestratorAgent
         Extract the fields that are relevant for this specific document type — do not use a fixed schema.
         Common fields: parties (array), effectiveDate (ISO 8601), expiryDate (ISO 8601),
         noticePeriodDays (integer), governingLaw, keyObligations (array), autoRenewal (boolean),
-        riskFlags (array) — include whatever is most relevant for this document.
+        riskFlags (array), paymentAmount (number), paymentCurrency, paymentUnit, paymentType,
+        paymentTerms — include whatever is most relevant for this document.
 
         For consulting agreements, prioritize: customer/client, supplier/vendor, consultantNames,
         assignmentTitle, assignmentDescription, assignmentStartDate, assignmentEndDate, workloadPercent,
@@ -66,6 +67,21 @@ public class ContractOrchestratorAgent
         For NDAs, prioritize: parties, mutualOrOneWay, effectiveDate, expiryDate,
         confidentialityPeriod, survivalPeriod, purpose, permittedDisclosures,
         returnOrDestructionObligation, governingLaw, jurisdiction, signatories.
+
+        For software licences, prioritize: customer/licensee, supplier/licensor, productName,
+        licenceMetric, seatCount, licenceStartDate, licenceEndDate, renewalTerms,
+        paymentAmount, paymentCurrency, paymentUnit, paymentType, supportTerms, auditRights.
+
+        For service/customer agreements, prioritize: customer/client, supplier/vendor,
+        serviceDescription, serviceStartDate, serviceEndDate, serviceLevels, renewalTerms,
+        terminationTerms, paymentAmount, paymentCurrency, paymentUnit, paymentType, paymentTerms.
+
+        For one-time engagements, prioritize: customer/client, supplier/vendor, eventDate,
+        serviceDescription, peopleMentioned, paymentAmount, paymentCurrency, paymentUnit,
+        paymentType, paymentTerms, cancellationTerms.
+
+        Set pendingReview to true if the document type is ambiguous, extraction confidence is below 0.75,
+        dates or parties conflict, payment facts conflict, or a core field for the document type is missing.
 
         Output ONLY this JSON object, no markdown, no code fences, no other text:
         {

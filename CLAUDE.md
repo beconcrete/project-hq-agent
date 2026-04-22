@@ -17,12 +17,9 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
     /styles                  # app.css
 /api                         # SWA-managed HTTP functions — served at /api/* (C#, isolated worker)
   /Middleware                # RequireAccessMiddleware (auth on every HTTP request)
-/functions                   # Separate Azure Function App — background/event-driven only (C#, isolated worker)
-  /HqAgentFunctions          # Blob triggers, queue triggers, timer triggers — NOT browser-facing
-/agents                      # Agent projects — each agent is its own project
-  /contract-orchestrator-agent   # HTTP-triggered contract analysis (tool-use pipeline)
-  /contract-chat-agent           # (in progress)
-/shared                      # Shared C# library — referenced by api/, functions/, and agents/
+/agents                      # Standalone Azure Function App — agent HTTP + queue triggers (C#, isolated worker)
+  /Functions/Contract        # ContractIngestion, ContractChat, ContractOrchestratorAgent, ContractChatAgent
+/shared                      # Shared C# library — referenced by api/ and agents/
   /HqAgent.Shared            # HqAgent.Shared.csproj — targets net8.0 for SWA compatibility
   /HqAgent.Shared.Tests      # Unit tests for the shared library
 /infra                       # Infrastructure scripts and config
@@ -45,8 +42,8 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 
 - **Never duplicate** `BlobStorageService`, `TableStorageService`, `ExtractionResult`, or `ContractMessage` in any project — always reference shared.
 - `ExtractionResult` uses an open `Dictionary<string, JsonElement>` for extracted fields — no fixed schema. The model decides what fields are relevant.
-- `Contracts` stores both the full open extraction JSON and normalized query fields such as expiry date, notice deadline, counterparties, people, renewal status, assignment dates, and risk flags.
-- `TableStorageService.WriteExtractionAsync` automatically sets `status = "pending_review"` when `ExtractionResult.PendingReview = true`.
+- `Contracts` stores both the full open extraction JSON and normalized query fields such as expiry date, notice deadline, counterparties, people, renewal status, assignment dates, payment facts, review state, and risk flags.
+- `TableStorageService.WriteExtractionAsync` automatically sets `status = "pending_review"` and `ReviewState = "pending_review"` when `ExtractionResult.PendingReview = true`.
 
 ### CI/CD — shared triggers all three pipelines
 
@@ -55,8 +52,7 @@ A change to `shared/**` triggers **all** deployment workflows:
 | Workflow | Deploys | Triggered by |
 |---|---|---|
 | `deploy-frontend.yml` | `api/` + frontend | `frontend/**`, `api/**`, `shared/**` |
-| `deploy-functions.yml` | `functions/HqAgentFunctions` | `functions/**`, `shared/**` |
-| `deploy-agent.yml` | `agents/contract-orchestrator-agent` | `agents/contract-orchestrator-agent/**`, `shared/**` |
+| `deploy-agent.yml` | `agents/` standalone Function App | `agents/**`, `shared/**` |
 
 ## Azure Resources
 
@@ -81,32 +77,32 @@ If a task requires an architectural decision to proceed, stop and ask. Do not pi
 - **API (`/api/`)**: SWA-managed HTTP functions, C# isolated worker, currently `net8.0`. Deployed by the SWA workflow (`api_location: api`). Served at `/api/*`. HTTP triggers only — no blob/queue triggers here.
 - **Agents Function App (`/agents/`)**: Separate Azure Function App (`hq-agent-function-app`, Consumption plan), currently `net10.0` isolated worker. Background and agent-driven work only. Never called directly by the browser.
 - **No containers, no App Service, no Container Registry, no Dapr** — all agent logic runs as Azure Functions.
-- **Storage**: Azure Blob (contract files), Queue (work queue), Table (extracted data + alerts)
-- **Real-time**: WebSockets (NOT SignalR, NOT polling)
+- **Storage**: Azure Blob (contract files), Queue (work queue), Table (`Contracts`, `ContractChatHistory`)
+- **Status updates**: the frontend polls status for uploaded contracts.
 - **Queue**: Azure Queue Storage (NOT Service Bus)
 - **NO**: Containers, App Service, Container Registry, Dapr, Kubernetes, Logic Apps, Service Bus, SignalR
 
-### What goes where: api/ vs functions/
+### What goes where: api/ vs agents/
 
-| Belongs in `api/` | Belongs in `functions/` |
+| Belongs in `api/` | Belongs in `agents/` |
 |---|---|
-| Anything the browser calls (`/api/*`) | Blob triggers (e.g. new contract uploaded) |
-| Auth helpers (`GetConfig`, future session endpoints) | Queue triggers (e.g. contract processing) |
+| Anything the browser calls (`/api/*`) | Queue triggers (e.g. contract processing) |
+| Auth helpers (`GetConfig`, session endpoints) | Internal agent HTTP endpoints called by SWA `/api` |
 | Data read/write endpoints for the UI | Timer triggers |
 | File upload endpoints | Anything that runs in the background without a browser request |
 
-**Rule of thumb**: if the frontend JavaScript calls it, it goes in `api/`. If it reacts to a storage event or a queue message, it goes in `functions/`. Never put blob/queue triggers in `api/` and never put HTTP endpoints meant for the browser in `functions/`.
+**Rule of thumb**: if the frontend JavaScript calls it, it goes in `api/`. If it processes queue work or hosts internal agents, it goes in `agents/`. Never put queue triggers in SWA-managed `api/`, and never expose internal agent endpoints directly to the browser.
 
 ## AI Model Usage
 
 | Step | Model | Reason |
 |---|---|---|
-| Triage / classification | Claude Haiku 4.5 | Fastest, cheapest |
-| Contract extraction | Claude Sonnet 4.6 | Best default speed/quality |
-| Contract chat Q&A | Claude Sonnet 4.6 | Quality matters |
-| Escalation / second-pass | Claude Opus 4.6 | Fallback only |
+| PDF text extraction | `gpt-4.1-mini` | Cheap, fast, supports OpenAI file content |
+| Triage / classification | `gpt-4.1-mini` | Cheap, fast |
+| Contract extraction | `gpt-4.1` | Better extraction accuracy |
+| Contract chat Q&A | `gpt-4.1-mini` | Fast interactive chat with tools |
 
-Always use prompt caching for system prompts and extraction schemas. Use Message Batches API for bulk jobs.
+MAF handoff workflows use OpenAI only. Anthropic rejects the assistant-message prefill pattern that MAF handoff uses.
 
 ## App Settings
 
@@ -197,6 +193,9 @@ See [docs/MAF.md](./docs/MAF.md) for patterns, gotchas, and working examples cov
 - `ContractChatAgent` intentionally uses a direct OpenAI tool-calling loop for interactive chat, but its tools delegate to `IContractIntelligence` instead of owning storage queries directly.
 - `IContractIntelligence` is the internal capability layer future agents should call for contract questions such as expiring contracts, renewal windows, people/person impact, counterparty lookup, and document fallback.
 - `DocumentTextExtractor` is shared by ingestion and chat document fallback. It extracts PDF text through OpenAI file input and DOCX text locally from `word/document.xml`.
+- See [docs/contract-capabilities.md](./docs/contract-capabilities.md) for the durable fact model, review states, and cross-domain capability pattern.
+- See [docs/contracts-eval.md](./docs/contracts-eval.md) for the manual ingestion/chat evaluation checklist.
+- See [docs/operations.md](./docs/operations.md) for production health checks, Application Insights queries, and safe maintenance scripts.
 
 ## GitHub Workflows
 

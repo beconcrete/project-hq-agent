@@ -12,5 +12,10 @@ public record NormalizedContractFacts(
     string CustomerName,
     DateTime? AssignmentStartDate,
     DateTime? AssignmentEndDate,
+    decimal? PaymentAmount,
+    string PaymentCurrency,
+    string PaymentUnit,
+    string PaymentType,
+    string PaymentTerms,
     IReadOnlyList<string> RiskFlags,
     IReadOnlyList<string> MissingFields);

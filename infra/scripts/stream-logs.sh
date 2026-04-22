@@ -18,9 +18,9 @@
 #
 # Expected sequence for a healthy upload:
 #   [ContractIngestion]         "ContractIngestion triggered for {correlationId}"
-#   [OpenAIContractWorkflow]    "Processing contract {correlationId} — {blobName}"
-#   [OpenAIContractWorkflow]    "PDF text extracted: {charCount} chars"
-#   [OpenAIContractWorkflow]    "Workflow complete for {correlationId}"
+#   [ContractOrchestratorAgent] "Processing contract {correlationId} — {blobName}"
+#   [DocumentTextExtractor]     "PDF text extracted: {charCount} chars"
+#   [ContractOrchestratorAgent] "Workflow output for {correlationId}: ..."
 #   [ContractIngestion]         "Contract {correlationId} stored — type:... pendingReview:... model:..."
 
 set -euo pipefail

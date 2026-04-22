@@ -6,6 +6,12 @@ set -euo pipefail
 STORAGE_ACCOUNT="hqagentstorage"
 RESOURCE_GROUP="hq-agent-resource-group"
 
+if [ "${HQ_AGENT_CONFIRM_CLEAR_STORAGE:-}" != "DELETE_CONTRACT_TEST_DATA" ]; then
+  echo "This deletes all blobs in contracts, clears contract queues, and deletes the Contracts table."
+  echo "Set HQ_AGENT_CONFIRM_CLEAR_STORAGE=DELETE_CONTRACT_TEST_DATA to continue." >&2
+  exit 1
+fi
+
 echo "Fetching storage key..."
 KEY=$(az storage account keys list \
   --account-name "$STORAGE_ACCOUNT" \

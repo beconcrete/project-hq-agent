@@ -34,6 +34,11 @@ public class ContractExtractionEntity : ITableEntity
     public string   CustomerName          { get; set; } = string.Empty;
     public DateTime? AssignmentStartDate  { get; set; }
     public DateTime? AssignmentEndDate    { get; set; }
+    public double?  PaymentAmount         { get; set; }
+    public string   PaymentCurrency       { get; set; } = string.Empty;
+    public string   PaymentUnit           { get; set; } = string.Empty;
+    public string   PaymentType           { get; set; } = string.Empty;
+    public string   PaymentTerms          { get; set; } = string.Empty;
     public string   RiskFlags             { get; set; } = string.Empty;
     public string   MissingFields         { get; set; } = string.Empty;
 
@@ -43,4 +48,8 @@ public class ContractExtractionEntity : ITableEntity
     public string    ModelUsed            { get; set; } = string.Empty;
     public DateTime? ProcessedAt         { get; set; }
     public string    Status              { get; set; } = string.Empty;
+    public string    ReviewState          { get; set; } = string.Empty;
+    public DateTime? ReviewedAt          { get; set; }
+    public string    ReviewedBy          { get; set; } = string.Empty;
+    public string    ReviewNote          { get; set; } = string.Empty;
 }

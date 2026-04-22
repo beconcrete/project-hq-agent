@@ -46,12 +46,18 @@ public class TableStorageService
             CustomerName     = facts.CustomerName,
             AssignmentStartDate = facts.AssignmentStartDate,
             AssignmentEndDate = facts.AssignmentEndDate,
+            PaymentAmount    = facts.PaymentAmount.HasValue ? (double)facts.PaymentAmount.Value : null,
+            PaymentCurrency  = facts.PaymentCurrency,
+            PaymentUnit      = facts.PaymentUnit,
+            PaymentType      = facts.PaymentType,
+            PaymentTerms     = facts.PaymentTerms,
             RiskFlags        = JsonSerializer.Serialize(facts.RiskFlags),
             MissingFields    = JsonSerializer.Serialize(facts.MissingFields),
             Fields           = JsonSerializer.Serialize(extraction),
             ModelUsed        = extraction.ModelUsed,
             ProcessedAt      = DateTime.UtcNow,
             Status           = extraction.PendingReview ? "pending_review" : "completed",
+            ReviewState      = extraction.PendingReview ? "pending_review" : "approved_by_extraction",
         };
 
         var table = _client.GetTableClient(TableName);
@@ -77,6 +83,7 @@ public class TableStorageService
             UploadedAt   = message.UploadedAt,
             ProcessedAt  = DateTime.UtcNow,
             Status       = "failed",
+            ReviewState  = "failed",
         };
 
         var table = _client.GetTableClient(TableName);
@@ -130,5 +137,40 @@ public class TableStorageService
 
         results.Sort((a, b) => b.UploadedAt.CompareTo(a.UploadedAt));
         return results;
+    }
+
+    public async Task<ContractExtractionEntity?> UpdateReviewAsync(
+        string            correlationId,
+        string            reviewState,
+        string            reviewedBy,
+        string?           reviewNote,
+        CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableName);
+        ContractExtractionEntity entity;
+        try
+        {
+            entity = (await table.GetEntityAsync<ContractExtractionEntity>(
+                correlationId, "extraction", cancellationToken: ct)).Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+
+        entity.ReviewState = reviewState;
+        entity.Status = reviewState is "approved" or "approved_by_extraction"
+            ? "completed"
+            : "pending_review";
+        entity.ReviewedAt = DateTime.UtcNow;
+        entity.ReviewedBy = reviewedBy;
+        entity.ReviewNote = reviewNote ?? "";
+
+        await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
+        _logger.LogInformation(
+            "Updated contract review — correlationId:{CorrelationId} reviewState:{ReviewState} reviewedBy:{ReviewedBy}",
+            correlationId, reviewState, reviewedBy);
+
+        return entity;
     }
 }

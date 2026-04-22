@@ -20,6 +20,9 @@ public class ContractFactsExtractorTests
               "assignmentEndDate": "2026-10-31",
               "noticePeriodDays": 30,
               "autoRenewal": false,
+              "hourlyRate": 1500,
+              "currency": "SEK",
+              "paymentTerms": "30 days net",
               "riskFlags": ["Customer may terminate for convenience"]
             }
             """,
@@ -34,6 +37,11 @@ public class ContractFactsExtractorTests
         Assert.Equal(new DateTime(2026, 10, 1), facts.NoticeDeadline);
         Assert.Equal(30, facts.NoticePeriodDays);
         Assert.False(facts.AutoRenewal);
+        Assert.Equal(1500m, facts.PaymentAmount);
+        Assert.Equal("SEK", facts.PaymentCurrency);
+        Assert.Equal("hour", facts.PaymentUnit);
+        Assert.Equal("rate", facts.PaymentType);
+        Assert.Equal("30 days net", facts.PaymentTerms);
         Assert.Contains("Bjorn Eriksen", facts.PeopleMentioned);
         Assert.Contains("Acme AB", facts.CounterpartyNames);
         Assert.Contains("Customer may terminate for convenience", facts.RiskFlags);
@@ -66,5 +74,36 @@ public class ContractFactsExtractorTests
         Assert.Contains("Contoso Ltd", facts.CounterpartyNames);
         Assert.Contains("Bjorn Eriksen", facts.PeopleMentioned);
         Assert.Contains("expiryDate", facts.MissingFields);
+    }
+
+    [Fact]
+    public void ExtractsOneTimeFeeFacts()
+    {
+        var extraction = new ExtractionResult(
+            "Inspirational Talk Agreement",
+            0.93,
+            """
+            {
+              "customer": "Nox Consulting",
+              "supplier": "Be Concrete AB",
+              "peopleMentioned": ["Björn Eriksen"],
+              "eventDate": "2026-04-20",
+              "oneTimeFee": "20000 SEK",
+              "currency": "SEK",
+              "paymentTerms": "Due after delivery"
+            }
+            """,
+            0.88,
+            "gpt-4.1",
+            false);
+
+        var facts = ContractFactsExtractor.Extract(extraction);
+
+        Assert.Equal("Nox Consulting", facts.PrimaryCounterparty);
+        Assert.Equal(20000m, facts.PaymentAmount);
+        Assert.Equal("SEK", facts.PaymentCurrency);
+        Assert.Equal("one_time", facts.PaymentUnit);
+        Assert.Equal("fixed_fee", facts.PaymentType);
+        Assert.Contains("Björn Eriksen", facts.PeopleMentioned);
     }
 }

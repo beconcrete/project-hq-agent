@@ -178,8 +178,16 @@ public class ContractIntelligence : IContractIntelligence
             e.CustomerName,
             e.AssignmentStartDate,
             e.AssignmentEndDate,
+            e.PaymentAmount,
+            e.PaymentCurrency,
+            e.PaymentUnit,
+            e.PaymentType,
+            e.PaymentTerms,
             ParseJsonList(e.RiskFlags),
-            ParseJsonList(e.MissingFields));
+            ParseJsonList(e.MissingFields),
+            string.IsNullOrWhiteSpace(e.ReviewState)
+                ? (e.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
+                : e.ReviewState);
 
     private static IReadOnlyList<string> ParseJsonList(string json)
     {

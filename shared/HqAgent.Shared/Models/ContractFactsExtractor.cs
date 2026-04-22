@@ -56,6 +56,32 @@ public static class ContractFactsExtractor
         "riskFlags", "risks", "keyRisks"
     ];
 
+    private static readonly string[] PaymentAmountKeys =
+    [
+        "paymentAmount", "amount", "fee", "fixedFee", "oneTimeFee", "contractValue",
+        "hourlyRate", "dailyRate", "monthlyFee", "licenseFee", "subscriptionFee", "rate"
+    ];
+
+    private static readonly string[] PaymentCurrencyKeys =
+    [
+        "paymentCurrency", "currency", "feeCurrency", "rateCurrency", "contractCurrency"
+    ];
+
+    private static readonly string[] PaymentUnitKeys =
+    [
+        "paymentUnit", "rateUnit", "billingUnit", "unit", "priceUnit"
+    ];
+
+    private static readonly string[] PaymentTypeKeys =
+    [
+        "paymentType", "feeType", "pricingModel", "commercialModel", "billingModel"
+    ];
+
+    private static readonly string[] PaymentTermsKeys =
+    [
+        "paymentTerms", "invoicingTerms", "invoiceTerms", "billingTerms"
+    ];
+
     public static NormalizedContractFacts Extract(ExtractionResult extraction)
     {
         if (string.IsNullOrWhiteSpace(extraction.ExtractedFields))
@@ -82,6 +108,16 @@ public static class ContractFactsExtractor
             var people = FindStrings(root, PersonKeys);
             var riskFlags = FindStrings(root, RiskKeys);
             var missingFields = BuildMissingFields(expiryDate, counterparties, people);
+            var paymentAmount = FindDecimal(root, PaymentAmountKeys);
+            var paymentCurrency = FirstNonEmpty(FindStrings(root, PaymentCurrencyKeys));
+            var paymentUnit = FirstNonEmpty(FindStrings(root, PaymentUnitKeys));
+            var paymentType = FirstNonEmpty(FindStrings(root, PaymentTypeKeys));
+
+            if (string.IsNullOrWhiteSpace(paymentUnit))
+                paymentUnit = InferPaymentUnit(root);
+
+            if (string.IsNullOrWhiteSpace(paymentType))
+                paymentType = InferPaymentType(root, paymentUnit);
 
             return new NormalizedContractFacts(
                 effectiveDate,
@@ -95,6 +131,11 @@ public static class ContractFactsExtractor
                 customerName,
                 FindDate(root, AssignmentStartDateKeys),
                 FindDate(root, AssignmentEndDateKeys),
+                paymentAmount,
+                paymentCurrency,
+                paymentUnit,
+                paymentType,
+                FirstNonEmpty(FindStrings(root, PaymentTermsKeys)),
                 riskFlags,
                 missingFields);
         }
@@ -105,7 +146,7 @@ public static class ContractFactsExtractor
     }
 
     private static NormalizedContractFacts Empty(IReadOnlyList<string>? missingFields = null) =>
-        new(null, null, null, null, null, "", [], [], "", null, null, [], missingFields ?? []);
+        new(null, null, null, null, null, "", [], [], "", null, null, null, "", "", "", "", [], missingFields ?? []);
 
     private static IReadOnlyList<string> BuildMissingFields(
         DateTime? expiryDate,
@@ -139,6 +180,33 @@ public static class ContractFactsExtractor
                 return number;
             if (value.ValueKind == JsonValueKind.String &&
                 int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out number))
+                return number;
+        }
+
+        return null;
+    }
+
+    private static decimal? FindDecimal(JsonElement root, IReadOnlyCollection<string> keys)
+    {
+        foreach (var value in FindValues(root, keys))
+        {
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number))
+                return number;
+
+            if (value.ValueKind != JsonValueKind.String)
+                continue;
+
+            var text = value.GetString();
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+
+            var cleaned = NormalizeNumberText(text);
+
+            if (decimal.TryParse(
+                    cleaned,
+                    NumberStyles.Number,
+                    CultureInfo.InvariantCulture,
+                    out number))
                 return number;
         }
 
@@ -246,4 +314,43 @@ public static class ContractFactsExtractor
 
     private static string NormalizeWhitespace(string value) =>
         string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static string NormalizeNumberText(string value)
+    {
+        var cleaned = new string(value
+            .Where(c => char.IsDigit(c) || c is '.' or ',' or '-')
+            .ToArray());
+
+        var lastDot = cleaned.LastIndexOf('.');
+        var lastComma = cleaned.LastIndexOf(',');
+        var decimalSeparator = Math.Max(lastDot, lastComma);
+        if (decimalSeparator < 0)
+            return cleaned;
+
+        var digitsAfter = cleaned.Length - decimalSeparator - 1;
+        if (digitsAfter == 3 && cleaned.Count(c => c is '.' or ',') == 1)
+            return cleaned.Replace(".", "").Replace(",", "");
+
+        var integer = cleaned[..decimalSeparator].Replace(".", "").Replace(",", "");
+        var decimals = cleaned[(decimalSeparator + 1)..].Replace(".", "").Replace(",", "");
+        return $"{integer}.{decimals}";
+    }
+
+    private static string InferPaymentUnit(JsonElement root)
+    {
+        if (FindDecimal(root, ["hourlyRate"]) is not null) return "hour";
+        if (FindDecimal(root, ["dailyRate"]) is not null) return "day";
+        if (FindDecimal(root, ["monthlyFee"]) is not null) return "month";
+        if (FindDecimal(root, ["oneTimeFee", "fixedFee"]) is not null) return "one_time";
+        return "";
+    }
+
+    private static string InferPaymentType(JsonElement root, string paymentUnit)
+    {
+        if (FindDecimal(root, ["oneTimeFee", "fixedFee"]) is not null || paymentUnit == "one_time")
+            return "fixed_fee";
+        if (FindDecimal(root, ["hourlyRate", "dailyRate", "monthlyFee", "rate"]) is not null)
+            return "rate";
+        return "";
+    }
 }

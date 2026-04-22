@@ -58,6 +58,16 @@ public class ListContracts
             customerName  = e.CustomerName,
             assignmentStartDate = e.AssignmentStartDate,
             assignmentEndDate = e.AssignmentEndDate,
+            paymentAmount = e.PaymentAmount,
+            paymentCurrency = e.PaymentCurrency,
+            paymentUnit = e.PaymentUnit,
+            paymentType = e.PaymentType,
+            paymentTerms = e.PaymentTerms,
+            reviewState = string.IsNullOrWhiteSpace(e.ReviewState)
+                ? (e.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
+                : e.ReviewState,
+            reviewedAt = e.ReviewedAt,
+            reviewedBy = e.ReviewedBy,
         });
 
         var res = req.CreateResponse();

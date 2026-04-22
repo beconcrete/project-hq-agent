@@ -95,8 +95,22 @@ public class GetContract
                 entity.CustomerName,
                 entity.AssignmentStartDate,
                 entity.AssignmentEndDate,
+                entity.PaymentAmount,
+                entity.PaymentCurrency,
+                entity.PaymentUnit,
+                entity.PaymentType,
+                entity.PaymentTerms,
                 riskFlags = JsonList(entity.RiskFlags),
                 missingFields = JsonList(entity.MissingFields),
+            },
+            review = new
+            {
+                state = string.IsNullOrWhiteSpace(entity.ReviewState)
+                    ? (entity.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
+                    : entity.ReviewState,
+                entity.ReviewedAt,
+                entity.ReviewedBy,
+                entity.ReviewNote,
             },
             fields,
         });
