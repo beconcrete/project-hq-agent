@@ -487,6 +487,8 @@ const suggestions = [
   "Which contracts affect Björn Eriksen?",
 ];
 
+// Keep a stable front-end touchpoint here for small deploy-only nudges when needed.
+
 const selectedContract = computed(
   () =>
     contracts.value.find((c) => c.correlationId === selectedId.value) ?? null,
