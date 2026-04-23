@@ -314,6 +314,9 @@ public class TableStorageService
                     ? "extension"
                     : "unknown";
 
+        if (relationshipType == "unknown")
+            return null;
+
         return new ContractRelationshipCandidate(
             existing.PartitionKey,
             existing.FileName,
@@ -349,13 +352,21 @@ public class TableStorageService
         var leftNames = ParseJsonList(left.CounterpartyNames)
             .Append(left.PrimaryCounterparty)
             .Append(left.CustomerName)
-            .Where(s => !string.IsNullOrWhiteSpace(s));
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Where(s => !IsOwnCompany(s));
         var rightNames = ParseJsonList(right.CounterpartyNames)
             .Append(right.PrimaryCounterparty)
             .Append(right.CustomerName)
-            .Where(s => !string.IsNullOrWhiteSpace(s));
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Where(s => !IsOwnCompany(s));
 
         return Overlaps(leftNames, rightNames);
+    }
+
+    private static bool IsOwnCompany(string value)
+    {
+        var normalized = Normalize(value);
+        return normalized is "be concrete ab" or "be concrete";
     }
 
     private static bool HasPeople(ContractExtractionEntity left, ContractExtractionEntity right) =>

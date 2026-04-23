@@ -333,25 +333,28 @@
                       Approve new
                     </button>
                     <button
+                      v-if="relationshipCandidates(contract).length"
                       class="btn-ghost-sm"
                       type="button"
-                      :disabled="!selectedRelatedId(contract) || reviewPending === contract.correlationId"
+                      :disabled="reviewPending === contract.correlationId"
                       @click.stop="reviewContract(contract, 'mark_extension')"
                     >
                       Mark extension
                     </button>
                     <button
+                      v-if="relationshipCandidates(contract).length"
                       class="btn-ghost-sm"
                       type="button"
-                      :disabled="!selectedRelatedId(contract) || reviewPending === contract.correlationId"
+                      :disabled="reviewPending === contract.correlationId"
                       @click.stop="reviewContract(contract, 'mark_replacement')"
                     >
                       Mark replacement
                     </button>
                     <button
+                      v-if="relationshipCandidates(contract).length"
                       class="btn-ghost-sm btn-ghost-sm--danger"
                       type="button"
-                      :disabled="!selectedRelatedId(contract) || reviewPending === contract.correlationId"
+                      :disabled="reviewPending === contract.correlationId"
                       @click.stop="reviewContract(contract, 'mark_duplicate_delete')"
                     >
                       Duplicate, delete
@@ -365,7 +368,7 @@
                       Reject, delete
                     </button>
                   </div>
-                  <p class="review-action-hint">
+                  <p v-if="relationshipCandidates(contract).length" class="review-action-hint">
                     Use replacement only when this upload should supersede the selected contract.
                     Use extension when it is a related new period. Duplicate and reject hide this upload.
                   </p>
@@ -972,7 +975,7 @@ function relationshipDisplay(type) {
     case "extension":
       return "Extension candidate";
     case "unknown":
-      return "Possible related contract";
+      return "";
     case "new":
       return "New contract";
     default:
