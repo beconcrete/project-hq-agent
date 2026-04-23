@@ -8,13 +8,37 @@ on:
       - "agents/**"
       - "shared/**"
       - ".github/workflows/deploy-agent.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "agents/**"
+      - "shared/**"
+      - ".github/workflows/deploy-agent.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: Build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build agents
+        run: dotnet build agents/agents.csproj --configuration Release
+
   build-and-deploy:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     name: Build and Deploy
 

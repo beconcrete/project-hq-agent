@@ -37,6 +37,7 @@ public class ContractChatAgent
         Use get_contract_document only when extracted fields lack the detail needed to answer the question.
 
         Answer accurately and concisely. Never hallucinate contract data, dates, parties, or clauses.
+        If a contract has reviewState pending_review, say that the extracted data needs review when it affects the answer.
         If you cannot find the answer in the available data, say so clearly.
         """;
 
@@ -44,7 +45,7 @@ public class ContractChatAgent
     [
         ChatTool.CreateFunctionTool(
             "list_contracts",
-            "List all contracts accessible to the current user with normalized metadata, dates, parties, people, and risk flags.",
+            "List all contracts accessible to the current user with normalized metadata, dates, parties, people, payment terms, review state, and risk flags.",
             BinaryData.FromString("""{"type":"object","properties":{},"required":[]}""")),
         ChatTool.CreateFunctionTool(
             "find_expiring_contracts",
@@ -60,7 +61,7 @@ public class ContractChatAgent
             BinaryData.FromString("""{"type":"object","properties":{"personName":{"type":"string","description":"The person name to search for"}},"required":["personName"]}""")),
         ChatTool.CreateFunctionTool(
             "find_contracts_by_counterparty",
-            "Find contracts by customer, supplier, vendor, client, or other counterparty name.",
+            "Find contracts by customer, supplier, vendor, client, or other counterparty name. Results include normalized payment facts when available.",
             BinaryData.FromString("""{"type":"object","properties":{"counterparty":{"type":"string","description":"The counterparty name to search for"}},"required":["counterparty"]}""")),
         ChatTool.CreateFunctionTool(
             "get_contract",

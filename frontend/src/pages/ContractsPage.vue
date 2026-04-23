@@ -157,6 +157,24 @@
       </footer>
     </div>
 
+    <section v-if="attentionContracts.length" class="attention-strip">
+      <div>
+        <span class="attention-kicker">Needs attention</span>
+        <strong>{{ attentionContracts.length }} contract{{ attentionContracts.length === 1 ? "" : "s" }}</strong>
+      </div>
+      <div class="attention-items">
+        <button
+          v-for="contract in attentionContracts.slice(0, 4)"
+          :key="contract.correlationId"
+          type="button"
+          @click="selectContract(contract)"
+        >
+          <span>{{ contract.fileName || contract.documentType || "Contract" }}</span>
+          <small>{{ lifecycleLabel(contract) }}</small>
+        </button>
+      </div>
+    </section>
+
     <div class="workspace">
       <div class="accordion" :class="{ open: contractsOpen }">
         <button
@@ -229,8 +247,11 @@
                     >
                     <template v-else>
                       {{ contract.documentType || "Document" }} ·
-                      {{ formatDate(contract.uploadedAt) }}
+                      {{ lifecycleLabel(contract) || formatDate(contract.uploadedAt) }}
                     </template>
+                  </div>
+                  <div v-if="paymentLabel(contract)" class="contract-row-payment">
+                    {{ paymentLabel(contract) }}
                   </div>
                 </div>
                 <div class="contract-row-end">
@@ -256,6 +277,15 @@
                     @click.stop="dismissFailed(contract.correlationId)"
                   >
                     Dismiss
+                  </button>
+                  <button
+                    v-if="auth.hasRole('admin') && isPendingReview(contract)"
+                    class="btn-ghost-sm"
+                    type="button"
+                    :disabled="reviewPending === contract.correlationId"
+                    @click.stop="approveContract(contract)"
+                  >
+                    Approve
                   </button>
                 </div>
               </div>
@@ -351,6 +381,7 @@ const detailData = ref(null);
 const detailLoading = ref(false);
 const detailError = ref("");
 const polls = new Map();
+const reviewPending = ref("");
 
 const contractsOpen = ref(false);
 const uploadOpen = ref(false);
@@ -374,6 +405,25 @@ const selectedContract = computed(
   () =>
     contracts.value.find((c) => c.correlationId === selectedId.value) ?? null,
 );
+
+const attentionContracts = computed(() => {
+  const now = new Date();
+  const horizon = new Date(now);
+  horizon.setDate(horizon.getDate() + 120);
+
+  return contracts.value
+    .filter((contract) => isClickable(contract))
+    .filter((contract) => {
+      if (isPendingReview(contract)) return true;
+      const actionDate = lifecycleDate(contract);
+      return actionDate && actionDate >= startOfDay(now) && actionDate <= horizon;
+    })
+    .sort((a, b) => {
+      if (isPendingReview(a) !== isPendingReview(b)) return isPendingReview(a) ? -1 : 1;
+      return (lifecycleDate(a)?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (lifecycleDate(b)?.getTime() ?? Number.MAX_SAFE_INTEGER);
+    });
+});
 
 const MAX_SIZE = 20 * 1024 * 1024;
 const ALLOWED_TYPES = [
@@ -466,6 +516,10 @@ function isClickable(contract) {
 }
 
 async function onCardClick(contract) {
+  await selectContract(contract);
+}
+
+async function selectContract(contract) {
   if (!isClickable(contract)) return;
   if (selectedId.value === contract.correlationId) {
     selectedId.value = null;
@@ -659,6 +713,46 @@ function dismissFailed(correlationId) {
   );
 }
 
+async function approveContract(contract) {
+  reviewPending.value = contract.correlationId;
+  try {
+    const res = await fetch("/api/review-contract", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": `Bearer ${auth.getToken()}`,
+      },
+      body: JSON.stringify({
+        correlationId: contract.correlationId,
+        reviewState: "approved",
+      }),
+    });
+    if (!res.ok) throw new Error(`Review failed (${res.status})`);
+    const data = await res.json();
+    const idx = contracts.value.findIndex(
+      (c) => c.correlationId === contract.correlationId,
+    );
+    if (idx >= 0) {
+      contracts.value[idx] = {
+        ...contracts.value[idx],
+        status: data.status,
+        reviewState: data.reviewState,
+        reviewedAt: data.reviewedAt,
+        reviewedBy: data.reviewedBy,
+      };
+    }
+  } catch {
+    chatMessages.value.push({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "I could not approve that contract review. Please try again.",
+      error: true,
+    });
+  } finally {
+    reviewPending.value = "";
+  }
+}
+
 function onDrop(e) {
   isDragging.value = false;
   uploadFiles(Array.from(e.dataTransfer.files));
@@ -724,6 +818,45 @@ function formatDate(iso) {
 
 function flatFields(fields) {
   return !fields || typeof fields !== "object" ? {} : fields;
+}
+
+function isPendingReview(contract) {
+  return (
+    contract.status === "pending_review" ||
+    contract.reviewState === "pending_review"
+  );
+}
+
+function lifecycleDate(contract) {
+  const date =
+    contract.noticeDeadline ??
+    contract.expiryDate ??
+    contract.assignmentEndDate;
+  return date ? startOfDay(new Date(date)) : null;
+}
+
+function lifecycleLabel(contract) {
+  if (isPendingReview(contract)) return "Pending review";
+  if (contract.noticeDeadline) return `Notice by ${formatDate(contract.noticeDeadline)}`;
+  if (contract.expiryDate) return `Expires ${formatDate(contract.expiryDate)}`;
+  if (contract.assignmentEndDate) return `Assignment ends ${formatDate(contract.assignmentEndDate)}`;
+  return "";
+}
+
+function paymentLabel(contract) {
+  if (!contract.paymentAmount) return "";
+  const amount = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+  }).format(contract.paymentAmount);
+  const currency = contract.paymentCurrency || "";
+  const unit = contract.paymentUnit && contract.paymentUnit !== "one_time"
+    ? `/${contract.paymentUnit}`
+    : "";
+  return `${amount} ${currency}${unit}`.trim();
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 </script>
 
@@ -1124,6 +1257,68 @@ textarea::placeholder {
   gap: 0.9rem;
 }
 
+.attention-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #d7cdbf;
+  border-radius: 12px;
+  background: #fffaf0;
+}
+
+.attention-strip strong {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.95rem;
+}
+
+.attention-kicker {
+  color: #8a5f11;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.attention-items {
+  display: flex;
+  gap: 0.5rem;
+  overflow: auto;
+}
+
+.attention-items button {
+  min-width: 11rem;
+  max-width: 16rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #e8d6aa;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attention-items span,
+.attention-items small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attention-items span {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.attention-items small {
+  margin-top: 0.12rem;
+  color: #8a5f11;
+  font-size: 0.72rem;
+}
+
 .workspace-right {
   display: none;
 }
@@ -1260,6 +1455,13 @@ textarea::placeholder {
   font-size: 0.76rem;
 }
 
+.contract-row-payment {
+  margin-top: 0.18rem;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 .contract-row-end {
   display: flex;
   align-items: center;
@@ -1299,6 +1501,11 @@ textarea::placeholder {
   color: var(--muted);
   padding: 0.25rem 0.55rem;
   cursor: pointer;
+}
+
+.btn-ghost-sm:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .dropzone {
@@ -1414,8 +1621,18 @@ textarea::placeholder {
   }
 
   .chat-suggestions,
-  .workspace {
+  .workspace,
+  .attention-strip {
     grid-template-columns: 1fr;
+  }
+
+  .attention-items {
+    flex-direction: column;
+  }
+
+  .attention-items button {
+    max-width: none;
+    width: 100%;
   }
 
   .message,

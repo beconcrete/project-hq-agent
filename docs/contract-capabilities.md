@@ -1,0 +1,97 @@
+# Contract Capabilities
+
+This document describes the Contracts domain boundary as it exists today and the shape future agents should depend on.
+
+## Durable Fact Model
+
+The `Contracts` table stores one row per uploaded contract. Raw extraction remains available in `Fields`, while common query facts are promoted to columns so chat, lifecycle views, and future agents can answer without scraping model JSON.
+
+| Area | Fields |
+|---|---|
+| Identity | `PartitionKey` correlation ID, `BlobPath`, `FileName`, `UserId`, `UploadedAt`, `DocumentType` |
+| Confidence | `TriageConfidence`, `ExtractionConfidence`, `ModelUsed`, `Status`, `ReviewState` |
+| Dates | `EffectiveDate`, `ExpiryDate`, `NoticePeriodDays`, `NoticeDeadline`, `AutoRenewal` |
+| Parties and people | `PrimaryCounterparty`, `CounterpartyNames`, `PeopleMentioned`, `CustomerName` |
+| Assignment | `AssignmentStartDate`, `AssignmentEndDate` |
+| Commercials | `PaymentAmount`, `PaymentCurrency`, `PaymentUnit`, `PaymentType`, `PaymentTerms` |
+| Quality | `RiskFlags`, `MissingFields`, `ReviewedAt`, `ReviewedBy`, `ReviewNote` |
+
+The supported first-pass contract families are NDA, consulting assignment, software/licence, service/customer agreement, and one-time engagement. Family-specific details that are not used for portfolio queries stay in `Fields`.
+
+## Review States
+
+`Status` controls coarse UI behavior:
+
+| Status | Meaning |
+|---|---|
+| `processing` | Uploaded and queued, not extracted yet |
+| `completed` | Extracted and usable |
+| `pending_review` | Extracted but core facts are missing, ambiguous, or low confidence |
+| `failed` | Ingestion failed |
+
+`ReviewState` is the human review layer:
+
+| ReviewState | Meaning |
+|---|---|
+| `approved_by_extraction` | Model extraction was confident enough to use without manual review |
+| `pending_review` | Admin should inspect the row before relying on it |
+| `approved` | Admin approved the extracted facts |
+| `failed` | No usable extraction exists |
+
+Approving a contract stores `ReviewedAt`, `ReviewedBy`, and optional `ReviewNote`. Raw extraction is not overwritten by approval.
+
+## Capability Boundary
+
+`IContractIntelligence` is the internal boundary for contract-domain facts. Future agents should call this interface instead of table storage, blob storage, or `ContractChatAgent`.
+
+Deterministic methods:
+
+| Method | Use |
+|---|---|
+| `ListContractsAsync` | Portfolio overview with normalized facts |
+| `GetContractAsync` | Detail for a known correlation ID |
+| `GetContractDocumentTextAsync` | Document fallback when extracted facts are insufficient |
+| `FindExpiringAsync` | Expiry queries by date range and optional type |
+| `FindRenewalWindowsAsync` | Notice/renewal/action deadline queries |
+| `FindByPersonAsync` | Employee, consultant, signatory, or contact impact |
+| `FindByCounterpartyAsync` | Customer, supplier, vendor, or party lookup |
+
+Conversational method:
+
+| Method | Use |
+|---|---|
+| `AnswerAsync` | A lightweight contract-domain answer wrapper. Use deterministic methods first when another agent already knows what it needs. |
+
+`ContractChatAgent` is a frontend conversation layer over this boundary. It may use model tool-calling and document fallback, but that should not become the integration contract for future Sales or HR agents.
+
+## Cross-Domain Invocation Pattern
+
+For the next domains, use domain capabilities directly in-process when the caller is hosted inside `hq-agent-function-app`. Do not expose internal agent endpoints to the browser.
+
+Minimum request context:
+
+| Field | Purpose |
+|---|---|
+| `Caller.UserId` | Ownership and audit trail |
+| `Caller.IsAdmin` | Visibility boundary |
+| `CorrelationId` | Traceability across agents and logs |
+| `SourceAgent` | Example: `SalesForecastAgent` |
+| `QuestionIntent` | Why the other domain is being called |
+
+Minimum response behavior:
+
+- Return normalized facts and source references, not prose only.
+- Preserve document correlation IDs when a contract influenced the answer.
+- Log the calling agent, target capability, and correlation ID.
+- Avoid letting future domains depend on `ContractExtractionEntity` internals.
+
+Example future Sales call:
+
+```csharp
+var expiringAssignments = await contracts.FindExpiringAsync(
+    caller,
+    from: DateOnly.FromDateTime(DateTime.UtcNow),
+    to: DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6)),
+    contractType: "consulting",
+    ct);
+```

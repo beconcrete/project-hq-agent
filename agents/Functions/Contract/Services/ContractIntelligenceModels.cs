@@ -30,8 +30,14 @@ public record ContractSummary(
     string CustomerName,
     DateTime? AssignmentStartDate,
     DateTime? AssignmentEndDate,
+    double? PaymentAmount,
+    string PaymentCurrency,
+    string PaymentUnit,
+    string PaymentType,
+    string PaymentTerms,
     IReadOnlyList<string> RiskFlags,
-    IReadOnlyList<string> MissingFields);
+    IReadOnlyList<string> MissingFields,
+    string ReviewState);
 
 public record ContractDetail(
     ContractSummary Summary,
