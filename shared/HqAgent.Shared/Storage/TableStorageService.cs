@@ -62,6 +62,19 @@ public class TableStorageService
 
         var table = _client.GetTableClient(TableName);
         await table.CreateIfNotExistsAsync(cancellationToken: ct);
+        var candidates = await FindRelationshipCandidatesAsync(table, entity, ct);
+        var primaryCandidate = candidates.FirstOrDefault();
+        entity.RelationshipType = primaryCandidate?.RelationshipType ?? "new";
+        entity.RelationshipReasons = JsonSerializer.Serialize(
+            primaryCandidate?.Reasons ?? Array.Empty<string>());
+        entity.RelationshipCandidates = JsonSerializer.Serialize(candidates);
+        if (primaryCandidate?.RelationshipType == "duplicate")
+            entity.DuplicateOfCorrelationId = primaryCandidate.CorrelationId;
+        else if (primaryCandidate?.RelationshipType == "replacement")
+            entity.SupersedesCorrelationId = primaryCandidate.CorrelationId;
+        else if (primaryCandidate?.RelationshipType == "extension")
+            entity.RelatedContractIds = JsonSerializer.Serialize(new[] { primaryCandidate.CorrelationId });
+
         await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
 
         _logger.LogInformation(
@@ -113,7 +126,8 @@ public class TableStorageService
 
     public async Task<List<ContractExtractionEntity>> ListExtractionsAsync(
         string?           userId = null,
-        CancellationToken ct     = default)
+        CancellationToken ct     = default,
+        bool              includeDeleted = false)
     {
         var table = _client.GetTableClient(TableName);
         var results = new List<ContractExtractionEntity>();
@@ -127,7 +141,8 @@ public class TableStorageService
             await foreach (var entity in table.QueryAsync<ContractExtractionEntity>(
                 filter: filter, cancellationToken: ct))
             {
-                results.Add(entity);
+                if (includeDeleted || !IsDeleted(entity))
+                    results.Add(entity);
             }
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
@@ -144,6 +159,8 @@ public class TableStorageService
         string            reviewState,
         string            reviewedBy,
         string?           reviewNote,
+        string?           relationshipType = null,
+        string?           relatedCorrelationId = null,
         CancellationToken ct = default)
     {
         var table = _client.GetTableClient(TableName);
@@ -159,12 +176,31 @@ public class TableStorageService
         }
 
         entity.ReviewState = reviewState;
-        entity.Status = reviewState is "approved" or "approved_by_extraction"
-            ? "completed"
-            : "pending_review";
+        entity.Status = reviewState is "rejected" or "duplicate_deleted"
+            ? "deleted"
+            : reviewState is "approved" or "approved_by_extraction"
+                ? "completed"
+                : "pending_review";
         entity.ReviewedAt = DateTime.UtcNow;
         entity.ReviewedBy = reviewedBy;
         entity.ReviewNote = reviewNote ?? "";
+        if (!string.IsNullOrWhiteSpace(relationshipType))
+            entity.RelationshipType = relationshipType;
+        if (!string.IsNullOrWhiteSpace(relatedCorrelationId))
+        {
+            if (entity.RelationshipType == "duplicate")
+                entity.DuplicateOfCorrelationId = relatedCorrelationId;
+            else if (entity.RelationshipType == "replacement")
+                entity.SupersedesCorrelationId = relatedCorrelationId;
+            else if (entity.RelationshipType == "extension")
+                entity.RelatedContractIds = JsonSerializer.Serialize(new[] { relatedCorrelationId });
+        }
+        if (entity.Status == "deleted")
+        {
+            entity.DeletedAt = DateTime.UtcNow;
+            entity.DeletedBy = reviewedBy;
+            entity.DeleteReason = reviewNote ?? reviewState;
+        }
 
         await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
         _logger.LogInformation(
@@ -173,4 +209,198 @@ public class TableStorageService
 
         return entity;
     }
+
+    private static bool IsDeleted(ContractExtractionEntity entity) =>
+        entity.Status == "deleted" ||
+        entity.ReviewState is "rejected" or "duplicate_deleted" ||
+        entity.DeletedAt.HasValue;
+
+    private static async Task<IReadOnlyList<ContractRelationshipCandidate>> FindRelationshipCandidatesAsync(
+        TableClient table,
+        ContractExtractionEntity entity,
+        CancellationToken ct)
+    {
+        var candidates = new List<ContractRelationshipCandidate>();
+
+        await foreach (var existing in table.QueryAsync<ContractExtractionEntity>(cancellationToken: ct))
+        {
+            if (existing.PartitionKey == entity.PartitionKey || IsDeleted(existing))
+                continue;
+
+            var candidate = ClassifyRelationship(entity, existing);
+            if (candidate is not null)
+                candidates.Add(candidate);
+        }
+
+        return candidates
+            .OrderByDescending(c => c.Score)
+            .ThenBy(c => c.RelationshipType == "duplicate" ? 0 : c.RelationshipType == "replacement" ? 1 : 2)
+            .Take(5)
+            .ToArray();
+    }
+
+    private static ContractRelationshipCandidate? ClassifyRelationship(
+        ContractExtractionEntity current,
+        ContractExtractionEntity existing)
+    {
+        var reasons = new List<string>();
+        var score = 0;
+
+        var sameFamily = SameFamily(current.DocumentType, existing.DocumentType);
+        if (sameFamily)
+        {
+            score += 2;
+            reasons.Add("Same contract family.");
+        }
+
+        if (SameCounterparty(current, existing))
+        {
+            score += 3;
+            reasons.Add("Same customer or counterparty.");
+        }
+
+        if (Overlaps(ParseJsonList(current.PeopleMentioned), ParseJsonList(existing.PeopleMentioned)))
+        {
+            score += 3;
+            reasons.Add("Same consultant, employee, contact, or signatory.");
+        }
+
+        var currentStart = current.AssignmentStartDate ?? current.EffectiveDate;
+        var currentEnd = current.AssignmentEndDate ?? current.ExpiryDate;
+        var existingStart = existing.AssignmentStartDate ?? existing.EffectiveDate;
+        var existingEnd = existing.AssignmentEndDate ?? existing.ExpiryDate;
+        var sameDates = SameDate(currentStart, existingStart) && SameDate(currentEnd, existingEnd);
+        var overlappingDates = DatesOverlap(currentStart, currentEnd, existingStart, existingEnd);
+        var laterNonOverlapping = currentStart.HasValue && existingEnd.HasValue && currentStart.Value.Date > existingEnd.Value.Date;
+
+        if (sameDates)
+        {
+            score += 4;
+            reasons.Add("Same start and end dates.");
+        }
+        else if (overlappingDates)
+        {
+            score += 2;
+            reasons.Add("Overlapping dates.");
+        }
+        else if (laterNonOverlapping)
+        {
+            score += 2;
+            reasons.Add("New later date period.");
+        }
+
+        if (SamePayment(current, existing))
+        {
+            score += 1;
+            reasons.Add("Similar payment facts.");
+        }
+        else if (PaymentChanged(current, existing))
+        {
+            score += 1;
+            reasons.Add("Payment, rate, or terms differ.");
+        }
+
+        if (score < 5)
+            return null;
+
+        var relationshipType = sameFamily && sameDates && score >= 9
+            ? "duplicate"
+            : overlappingDates
+                ? "replacement"
+                : laterNonOverlapping
+                    ? "extension"
+                    : "unknown";
+
+        return new ContractRelationshipCandidate(
+            existing.PartitionKey,
+            existing.FileName,
+            existing.DocumentType,
+            relationshipType,
+            score,
+            reasons);
+    }
+
+    private static bool SameFamily(string left, string right)
+    {
+        var l = Family(left);
+        var r = Family(right);
+        return l.Length > 0 && l == r;
+    }
+
+    private static string Family(string documentType)
+    {
+        var normalized = documentType.ToLowerInvariant();
+        if (normalized.Contains("nda") || normalized.Contains("non-disclosure") || normalized.Contains("confidential"))
+            return "nda";
+        if (normalized.Contains("consult"))
+            return "consulting";
+        if (normalized.Contains("license") || normalized.Contains("licence") || normalized.Contains("software"))
+            return "software_license";
+        if (normalized.Contains("service") || normalized.Contains("customer"))
+            return "service";
+        return normalized.Trim();
+    }
+
+    private static bool SameCounterparty(ContractExtractionEntity left, ContractExtractionEntity right)
+    {
+        var leftNames = ParseJsonList(left.CounterpartyNames)
+            .Append(left.PrimaryCounterparty)
+            .Append(left.CustomerName)
+            .Where(s => !string.IsNullOrWhiteSpace(s));
+        var rightNames = ParseJsonList(right.CounterpartyNames)
+            .Append(right.PrimaryCounterparty)
+            .Append(right.CustomerName)
+            .Where(s => !string.IsNullOrWhiteSpace(s));
+
+        return Overlaps(leftNames, rightNames);
+    }
+
+    private static bool Overlaps(IEnumerable<string> left, IEnumerable<string> right)
+    {
+        var normalizedRight = right.Select(Normalize).Where(s => s.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return left.Select(Normalize).Where(s => s.Length > 0).Any(normalizedRight.Contains);
+    }
+
+    private static bool SameDate(DateTime? left, DateTime? right) =>
+        left.HasValue && right.HasValue && left.Value.Date == right.Value.Date;
+
+    private static bool DatesOverlap(DateTime? leftStart, DateTime? leftEnd, DateTime? rightStart, DateTime? rightEnd)
+    {
+        if (!leftStart.HasValue || !leftEnd.HasValue || !rightStart.HasValue || !rightEnd.HasValue)
+            return false;
+
+        return leftStart.Value.Date <= rightEnd.Value.Date && rightStart.Value.Date <= leftEnd.Value.Date;
+    }
+
+    private static bool SamePayment(ContractExtractionEntity left, ContractExtractionEntity right) =>
+        left.PaymentAmount.HasValue &&
+        right.PaymentAmount.HasValue &&
+        Math.Abs(left.PaymentAmount.Value - right.PaymentAmount.Value) < 0.01 &&
+        string.Equals(left.PaymentCurrency, right.PaymentCurrency, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(left.PaymentUnit, right.PaymentUnit, StringComparison.OrdinalIgnoreCase);
+
+    private static bool PaymentChanged(ContractExtractionEntity left, ContractExtractionEntity right) =>
+        left.PaymentAmount.HasValue &&
+        right.PaymentAmount.HasValue &&
+        Math.Abs(left.PaymentAmount.Value - right.PaymentAmount.Value) >= 0.01;
+
+    private static IReadOnlyList<string> ParseJsonList(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try { return JsonSerializer.Deserialize<string[]>(json) ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    private static string Normalize(string value) =>
+        string.Join(" ", value.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
+
+public record ContractRelationshipCandidate(
+    string CorrelationId,
+    string FileName,
+    string DocumentType,
+    string RelationshipType,
+    int Score,
+    IReadOnlyList<string> Reasons);

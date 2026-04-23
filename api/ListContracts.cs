@@ -68,6 +68,12 @@ public class ListContracts
                 : e.ReviewState,
             reviewedAt = e.ReviewedAt,
             reviewedBy = e.ReviewedBy,
+            relationshipType = e.RelationshipType,
+            duplicateOfCorrelationId = e.DuplicateOfCorrelationId,
+            supersedesCorrelationId = e.SupersedesCorrelationId,
+            relatedContractIds = JsonList(e.RelatedContractIds),
+            relationshipReasons = JsonList(e.RelationshipReasons),
+            relationshipCandidates = JsonCandidates(e.RelationshipCandidates),
         });
 
         var res = req.CreateResponse();
@@ -84,4 +90,44 @@ public class ListContracts
         res.StatusCode = status;
         return res;
     }
+
+    private static IReadOnlyList<string> JsonList(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try { return System.Text.Json.JsonSerializer.Deserialize<string[]>(json) ?? []; }
+        catch (System.Text.Json.JsonException) { return []; }
+    }
+
+    private static IReadOnlyList<object> JsonCandidates(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            var candidates = System.Text.Json.JsonSerializer.Deserialize<RelationshipCandidateDto[]>(
+                json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+            return candidates.Select(c => new
+            {
+                correlationId = c.CorrelationId,
+                fileName = c.FileName,
+                documentType = c.DocumentType,
+                relationshipType = c.RelationshipType,
+                score = c.Score,
+                reasons = c.Reasons,
+            }).ToArray();
+        }
+        catch (System.Text.Json.JsonException) { return []; }
+    }
+
+    private record RelationshipCandidateDto(
+        string CorrelationId,
+        string FileName,
+        string DocumentType,
+        string RelationshipType,
+        int Score,
+        IReadOnlyList<string> Reasons);
 }

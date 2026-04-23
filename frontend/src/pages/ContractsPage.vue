@@ -208,86 +208,164 @@
               <div
                 v-for="contract in contracts"
                 :key="contract.correlationId"
-                class="contract-row"
-                :class="{
-                  'contract-row--clickable': isClickable(contract),
-                  'contract-row--selected':
-                    selectedId === contract.correlationId,
-                }"
-                @click="onCardClick(contract)"
+                class="contract-item"
               >
-                <div class="contract-row-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path
-                      v-if="contract.status === 'processing'"
-                      d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-                    />
-                    <template v-else-if="contract.status === 'failed'">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 8v4M12 16h.01" />
-                    </template>
-                    <template v-else>
+                <div
+                  class="contract-row"
+                  :class="{
+                    'contract-row--clickable': isClickable(contract),
+                    'contract-row--selected':
+                      selectedId === contract.correlationId,
+                    'contract-row--processing': contract.status === 'processing',
+                  }"
+                  @click="onCardClick(contract)"
+                >
+                  <div class="contract-row-icon">
+                    <svg
+                      :class="{ 'spin-icon': contract.status === 'processing' }"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                    >
                       <path
-                        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                        v-if="contract.status === 'processing'"
+                        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
                       />
-                      <path d="M14 2v6h6" />
-                    </template>
-                  </svg>
-                </div>
-                <div class="contract-row-body">
-                  <div class="contract-row-name">
-                    {{ contract.fileName || "Contract" }}
+                      <template v-else-if="contract.status === 'failed'">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 8v4M12 16h.01" />
+                      </template>
+                      <template v-else>
+                        <path
+                          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                        />
+                        <path d="M14 2v6h6" />
+                      </template>
+                    </svg>
                   </div>
-                  <div class="contract-row-meta">
-                    <template v-if="contract.status === 'processing'"
-                      >Extracting fields...</template
+                  <div class="contract-row-body">
+                    <div class="contract-row-name">
+                      {{ contract.fileName || "Contract" }}
+                    </div>
+                    <div class="contract-row-meta">
+                      <template v-if="contract.status === 'processing'"
+                        >Extracting fields...</template
+                      >
+                      <template v-else-if="contract.status === 'failed'"
+                        >Extraction failed</template
+                      >
+                      <template v-else>
+                        {{ contract.documentType || "Document" }} ·
+                        {{ lifecycleLabel(contract) || formatDate(contract.uploadedAt) }}
+                      </template>
+                    </div>
+                    <div v-if="paymentLabel(contract)" class="contract-row-payment">
+                      {{ paymentLabel(contract) }}
+                    </div>
+                    <div v-if="relationshipLabel(contract)" class="contract-row-relation">
+                      {{ relationshipLabel(contract) }}
+                    </div>
+                  </div>
+                  <div class="contract-row-end">
+                    <span
+                      v-if="contract.status === 'processing'"
+                      class="badge badge--blue"
+                      >Processing</span
                     >
-                    <template v-else-if="contract.status === 'failed'"
-                      >Extraction failed</template
+                    <span
+                      v-else-if="contract.status === 'pending_review'"
+                      class="badge badge--amber"
+                      >Review</span
                     >
-                    <template v-else>
-                      {{ contract.documentType || "Document" }} ·
-                      {{ lifecycleLabel(contract) || formatDate(contract.uploadedAt) }}
-                    </template>
-                  </div>
-                  <div v-if="paymentLabel(contract)" class="contract-row-payment">
-                    {{ paymentLabel(contract) }}
+                    <span
+                      v-else-if="contract.status === 'failed'"
+                      class="badge badge--red"
+                      >Failed</span
+                    >
+                    <button
+                      v-if="contract.status === 'failed'"
+                      class="btn-ghost-sm"
+                      type="button"
+                      @click.stop="dismissFailed(contract.correlationId)"
+                    >
+                      Dismiss
+                    </button>
                   </div>
                 </div>
-                <div class="contract-row-end">
-                  <span
-                    v-if="contract.status === 'processing'"
-                    class="badge badge--blue"
-                    >Processing</span
+                <section
+                  v-if="auth.hasRole('admin') && isPendingReview(contract)"
+                  class="review-panel"
+                >
+                  <div class="review-panel-head">
+                    <div>
+                      <strong>Review needed</strong>
+                      <p>{{ reviewSummary(contract) }}</p>
+                    </div>
+                    <a :href="DOCS.contractCapabilities" target="_blank" rel="noreferrer">
+                      Review docs
+                    </a>
+                  </div>
+                  <div
+                    v-if="relationshipCandidates(contract).length"
+                    class="candidate-list"
                   >
-                  <span
-                    v-else-if="contract.status === 'pending_review'"
-                    class="badge badge--amber"
-                    >Review</span
-                  >
-                  <span
-                    v-else-if="contract.status === 'failed'"
-                    class="badge badge--red"
-                    >Failed</span
-                  >
-                  <button
-                    v-if="contract.status === 'failed'"
-                    class="btn-ghost-sm"
-                    type="button"
-                    @click.stop="dismissFailed(contract.correlationId)"
-                  >
-                    Dismiss
-                  </button>
-                  <button
-                    v-if="auth.hasRole('admin') && isPendingReview(contract)"
-                    class="btn-ghost-sm"
-                    type="button"
-                    :disabled="reviewPending === contract.correlationId"
-                    @click.stop="approveContract(contract)"
-                  >
-                    Approve
-                  </button>
-                </div>
+                    <button
+                      v-for="candidate in relationshipCandidates(contract)"
+                      :key="candidate.correlationId"
+                      type="button"
+                      :class="[
+                        'candidate',
+                        selectedRelatedId(contract) === candidate.correlationId && 'candidate--selected',
+                      ]"
+                      @click.stop="setSelectedRelatedId(contract, candidate.correlationId)"
+                    >
+                      <span>{{ candidate.fileName || candidate.documentType || "Related contract" }}</span>
+                      <small>{{ candidateLabel(candidate) }}</small>
+                    </button>
+                  </div>
+                  <div class="review-actions">
+                    <button
+                      class="btn-ghost-sm"
+                      type="button"
+                      :disabled="reviewPending === contract.correlationId"
+                      @click.stop="reviewContract(contract, 'approve_as_new')"
+                    >
+                      Approve new
+                    </button>
+                    <button
+                      class="btn-ghost-sm"
+                      type="button"
+                      :disabled="!selectedRelatedId(contract) || reviewPending === contract.correlationId"
+                      @click.stop="reviewContract(contract, 'mark_extension')"
+                    >
+                      Mark extension
+                    </button>
+                    <button
+                      class="btn-ghost-sm"
+                      type="button"
+                      :disabled="!selectedRelatedId(contract) || reviewPending === contract.correlationId"
+                      @click.stop="reviewContract(contract, 'mark_replacement')"
+                    >
+                      Mark replacement
+                    </button>
+                    <button
+                      class="btn-ghost-sm btn-ghost-sm--danger"
+                      type="button"
+                      :disabled="!selectedRelatedId(contract) || reviewPending === contract.correlationId"
+                      @click.stop="reviewContract(contract, 'mark_duplicate_delete')"
+                    >
+                      Duplicate, delete
+                    </button>
+                    <button
+                      class="btn-ghost-sm btn-ghost-sm--danger"
+                      type="button"
+                      :disabled="reviewPending === contract.correlationId"
+                      @click.stop="reviewContract(contract, 'reject_delete')"
+                    >
+                      Reject, delete
+                    </button>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -394,6 +472,12 @@ const chatScroll = ref(null);
 const chatInputEl = ref(null);
 const promptHistory = ref([]);
 const historyIndex = ref(0);
+const selectedRelatedIds = ref({});
+
+const DOCS = {
+  contractCapabilities:
+    "https://github.com/beconcrete/project-hq-agent/blob/main/docs/contract-capabilities.md",
+};
 
 const suggestions = [
   "Which contracts expire next?",
@@ -713,9 +797,10 @@ function dismissFailed(correlationId) {
   );
 }
 
-async function approveContract(contract) {
+async function reviewContract(contract, action) {
   reviewPending.value = contract.correlationId;
   try {
+    const relatedCorrelationId = selectedRelatedId(contract) || undefined;
     const res = await fetch("/api/review-contract", {
       method: "POST",
       headers: {
@@ -724,7 +809,8 @@ async function approveContract(contract) {
       },
       body: JSON.stringify({
         correlationId: contract.correlationId,
-        reviewState: "approved",
+        action,
+        relatedCorrelationId,
       }),
     });
     if (!res.ok) throw new Error(`Review failed (${res.status})`);
@@ -732,11 +818,18 @@ async function approveContract(contract) {
     const idx = contracts.value.findIndex(
       (c) => c.correlationId === contract.correlationId,
     );
-    if (idx >= 0) {
+    if (idx >= 0 && data.status === "deleted") {
+      contracts.value.splice(idx, 1);
+      if (selectedId.value === contract.correlationId) selectedId.value = null;
+    } else if (idx >= 0) {
       contracts.value[idx] = {
         ...contracts.value[idx],
         status: data.status,
         reviewState: data.reviewState,
+        relationshipType: data.relationshipType,
+        duplicateOfCorrelationId: data.duplicateOfCorrelationId,
+        supersedesCorrelationId: data.supersedesCorrelationId,
+        relatedContractIds: data.relatedContractIds,
         reviewedAt: data.reviewedAt,
         reviewedBy: data.reviewedBy,
       };
@@ -745,7 +838,7 @@ async function approveContract(contract) {
     chatMessages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "I could not approve that contract review. Please try again.",
+      content: "I could not update that contract review. Please try again.",
       error: true,
     });
   } finally {
@@ -825,6 +918,64 @@ function isPendingReview(contract) {
     contract.status === "pending_review" ||
     contract.reviewState === "pending_review"
   );
+}
+
+function relationshipCandidates(contract) {
+  return Array.isArray(contract.relationshipCandidates)
+    ? contract.relationshipCandidates
+    : [];
+}
+
+function selectedRelatedId(contract) {
+  return (
+    selectedRelatedIds.value[contract.correlationId] ??
+    relationshipCandidates(contract)[0]?.correlationId ??
+    ""
+  );
+}
+
+function setSelectedRelatedId(contract, correlationId) {
+  selectedRelatedIds.value = {
+    ...selectedRelatedIds.value,
+    [contract.correlationId]: correlationId,
+  };
+}
+
+function reviewSummary(contract) {
+  const candidates = relationshipCandidates(contract);
+  if (candidates.length === 0)
+    return "No close match was found. Approve as a new contract or reject and delete the upload.";
+
+  return "Possible duplicate, replacement, or extension found. Pick the related contract before choosing an action.";
+}
+
+function candidateLabel(candidate) {
+  const reasons = Array.isArray(candidate.reasons) ? candidate.reasons : [];
+  const relationship = relationshipDisplay(candidate.relationshipType);
+  return [relationship, reasons.slice(0, 2).join(" ")].filter(Boolean).join(" · ");
+}
+
+function relationshipLabel(contract) {
+  const type = relationshipDisplay(contract.relationshipType);
+  if (!type || contract.relationshipType === "new") return "";
+  return type;
+}
+
+function relationshipDisplay(type) {
+  switch (type) {
+    case "duplicate":
+      return "Likely duplicate";
+    case "replacement":
+      return "Likely replacement";
+    case "extension":
+      return "Likely extension";
+    case "unknown":
+      return "Possible related contract";
+    case "new":
+      return "New contract";
+    default:
+      return "";
+  }
 }
 
 function lifecycleDate(contract) {
@@ -1401,12 +1552,23 @@ textarea::placeholder {
   overflow: auto;
 }
 
+.contract-item {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .contract-row {
   gap: 0.7rem;
   padding: 0.62rem;
   border: 1px solid #ebe5dc;
   border-radius: 8px;
   background: var(--paper);
+}
+
+.contract-row--processing {
+  background: linear-gradient(90deg, #fbfaf7, #f2faf7, #fbfaf7);
+  background-size: 220% 100%;
+  animation: row-progress 1.8s infinite linear;
 }
 
 .contract-row--clickable {
@@ -1462,6 +1624,13 @@ textarea::placeholder {
   font-weight: 700;
 }
 
+.contract-row-relation {
+  margin-top: 0.16rem;
+  color: #8a5f11;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .contract-row-end {
   display: flex;
   align-items: center;
@@ -1503,9 +1672,112 @@ textarea::placeholder {
   cursor: pointer;
 }
 
+.btn-ghost-sm--danger {
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
 .btn-ghost-sm:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+.spin-icon {
+  animation: spin 0.9s linear infinite;
+}
+
+.review-panel {
+  padding: 0.75rem;
+  border: 1px solid #ead8aa;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.review-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.review-panel-head strong {
+  display: block;
+  font-size: 0.84rem;
+}
+
+.review-panel-head p {
+  margin: 0.15rem 0 0;
+  color: #746f67;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.review-panel-head a {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.candidate {
+  padding: 0.52rem 0.6rem;
+  border: 1px solid #ead8aa;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.candidate--selected {
+  border-color: var(--accent);
+  background: #f6fbf9;
+}
+
+.candidate span,
+.candidate small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate span {
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.candidate small {
+  margin-top: 0.12rem;
+  color: #746f67;
+  font-size: 0.7rem;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes row-progress {
+  to {
+    background-position: -220% 0;
+  }
 }
 
 .dropzone {

@@ -15,6 +15,8 @@ The `Contracts` table stores one row per uploaded contract. Raw extraction remai
 | Assignment | `AssignmentStartDate`, `AssignmentEndDate` |
 | Commercials | `PaymentAmount`, `PaymentCurrency`, `PaymentUnit`, `PaymentType`, `PaymentTerms` |
 | Quality | `RiskFlags`, `MissingFields`, `ReviewedAt`, `ReviewedBy`, `ReviewNote` |
+| Relationships | `RelationshipType`, `DuplicateOfCorrelationId`, `SupersedesCorrelationId`, `RelatedContractIds`, `RelationshipReasons`, `RelationshipCandidates` |
+| Soft delete | `DeletedAt`, `DeletedBy`, `DeleteReason` |
 
 The supported first-pass contract families are NDA, consulting assignment, software/licence, service/customer agreement, and one-time engagement. Family-specific details that are not used for portfolio queries stay in `Fields`.
 
@@ -27,6 +29,7 @@ The supported first-pass contract families are NDA, consulting assignment, softw
 | `processing` | Uploaded and queued, not extracted yet |
 | `completed` | Extracted and usable |
 | `pending_review` | Extracted but core facts are missing, ambiguous, or low confidence |
+| `deleted` | Soft-deleted after admin review; hidden from default list and chat |
 | `failed` | Ingestion failed |
 
 `ReviewState` is the human review layer:
@@ -36,9 +39,33 @@ The supported first-pass contract families are NDA, consulting assignment, softw
 | `approved_by_extraction` | Model extraction was confident enough to use without manual review |
 | `pending_review` | Admin should inspect the row before relying on it |
 | `approved` | Admin approved the extracted facts |
+| `rejected` | Admin rejected and soft-deleted the upload |
+| `duplicate_deleted` | Admin marked the upload as a duplicate and soft-deleted it |
 | `failed` | No usable extraction exists |
 
-Approving a contract stores `ReviewedAt`, `ReviewedBy`, and optional `ReviewNote`. Raw extraction is not overwritten by approval.
+Approving, rejecting, or classifying a relationship stores `ReviewedAt`, `ReviewedBy`, and optional `ReviewNote`. Raw extraction is not overwritten by review actions. Reject/delete and duplicate/delete are soft deletes so the audit trail remains available.
+
+## Duplicate And Update Detection
+
+After extraction, a new contract is compared with existing active contracts. The first version is deterministic and uses normalized facts:
+
+| RelationshipType | Meaning |
+|---|---|
+| `duplicate` | Same family, same or similar parties/people, and same dates; likely the same contract uploaded again |
+| `replacement` | Same customer/consultant with overlapping dates and changed material facts such as payment or terms |
+| `extension` | Same customer/consultant with a later non-overlapping period |
+| `new` | No meaningful relationship found |
+| `unknown` | Similarity exists, but not enough to confidently classify it |
+
+The UI shows relationship candidates with reasons. Admin actions decide what to do:
+
+- **Approve new** keeps the upload as a standalone active contract.
+- **Mark extension** keeps the upload active and records it as related to the selected contract.
+- **Mark replacement** keeps the upload active and records which contract it supersedes.
+- **Duplicate, delete** records the duplicate relationship and soft-deletes the new upload.
+- **Reject, delete** soft-deletes a bad or unusable upload.
+
+For v1, state-changing actions happen in the UI. Chat may mention review or relationship status when it affects an answer, but it does not make delete/replacement decisions.
 
 ## Capability Boundary
 

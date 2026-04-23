@@ -52,4 +52,13 @@ public class ContractExtractionEntity : ITableEntity
     public DateTime? ReviewedAt          { get; set; }
     public string    ReviewedBy          { get; set; } = string.Empty;
     public string    ReviewNote          { get; set; } = string.Empty;
+    public string    RelationshipType     { get; set; } = string.Empty;
+    public string    DuplicateOfCorrelationId { get; set; } = string.Empty;
+    public string    SupersedesCorrelationId  { get; set; } = string.Empty;
+    public string    RelatedContractIds   { get; set; } = string.Empty;
+    public string    RelationshipReasons  { get; set; } = string.Empty;
+    public string    RelationshipCandidates { get; set; } = string.Empty;
+    public DateTime? DeletedAt           { get; set; }
+    public string    DeletedBy           { get; set; } = string.Empty;
+    public string    DeleteReason        { get; set; } = string.Empty;
 }

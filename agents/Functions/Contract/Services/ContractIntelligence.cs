@@ -35,7 +35,7 @@ public class ContractIntelligence : IContractIntelligence
         CancellationToken ct)
     {
         var entity = await _table.GetExtractionAsync(correlationId, ct);
-        if (entity is null || !CanAccess(entity, caller))
+        if (entity is null || IsDeleted(entity) || !CanAccess(entity, caller))
             return null;
 
         return new ContractDetail(ToSummary(entity), entity.Fields, entity);
@@ -187,7 +187,12 @@ public class ContractIntelligence : IContractIntelligence
             ParseJsonList(e.MissingFields),
             string.IsNullOrWhiteSpace(e.ReviewState)
                 ? (e.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
-                : e.ReviewState);
+                : e.ReviewState,
+            e.RelationshipType,
+            e.DuplicateOfCorrelationId,
+            e.SupersedesCorrelationId,
+            ParseJsonList(e.RelatedContractIds),
+            ParseJsonList(e.RelationshipReasons));
 
     private static IReadOnlyList<string> ParseJsonList(string json)
     {
@@ -209,4 +214,9 @@ public class ContractIntelligence : IContractIntelligence
 
     private static DateTime? ToDateTime(DateOnly? date) =>
         date?.ToDateTime(TimeOnly.MinValue);
+
+    private static bool IsDeleted(ContractExtractionEntity entity) =>
+        entity.Status == "deleted" ||
+        entity.ReviewState is "rejected" or "duplicate_deleted" ||
+        entity.DeletedAt.HasValue;
 }

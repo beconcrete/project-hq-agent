@@ -37,7 +37,12 @@ public record ContractSummary(
     string PaymentTerms,
     IReadOnlyList<string> RiskFlags,
     IReadOnlyList<string> MissingFields,
-    string ReviewState);
+    string ReviewState,
+    string RelationshipType,
+    string DuplicateOfCorrelationId,
+    string SupersedesCorrelationId,
+    IReadOnlyList<string> RelatedContractIds,
+    IReadOnlyList<string> RelationshipReasons);
 
 public record ContractDetail(
     ContractSummary Summary,

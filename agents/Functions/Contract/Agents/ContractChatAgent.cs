@@ -38,6 +38,8 @@ public class ContractChatAgent
 
         Answer accurately and concisely. Never hallucinate contract data, dates, parties, or clauses.
         If a contract has reviewState pending_review, say that the extracted data needs review when it affects the answer.
+        If relationshipType indicates replacement, extension, or duplicate context, mention it when it affects the answer.
+        Deleted or rejected contracts are not active contracts and should not be treated as available agreements.
         If you cannot find the answer in the available data, say so clearly.
         """;
 

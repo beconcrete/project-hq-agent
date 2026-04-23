@@ -80,6 +80,29 @@ public class GetContract
             processedAt    = entity.ProcessedAt,
             status         = entity.Status,
             documentType   = entity.DocumentType,
+            effectiveDate = entity.EffectiveDate,
+            expiryDate = entity.ExpiryDate,
+            noticeDeadline = entity.NoticeDeadline,
+            noticePeriodDays = entity.NoticePeriodDays,
+            autoRenewal = entity.AutoRenewal,
+            primaryCounterparty = entity.PrimaryCounterparty,
+            customerName = entity.CustomerName,
+            assignmentStartDate = entity.AssignmentStartDate,
+            assignmentEndDate = entity.AssignmentEndDate,
+            paymentAmount = entity.PaymentAmount,
+            paymentCurrency = entity.PaymentCurrency,
+            paymentUnit = entity.PaymentUnit,
+            paymentType = entity.PaymentType,
+            paymentTerms = entity.PaymentTerms,
+            reviewState = string.IsNullOrWhiteSpace(entity.ReviewState)
+                ? (entity.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
+                : entity.ReviewState,
+            relationshipType = entity.RelationshipType,
+            duplicateOfCorrelationId = entity.DuplicateOfCorrelationId,
+            supersedesCorrelationId = entity.SupersedesCorrelationId,
+            relatedContractIds = JsonList(entity.RelatedContractIds),
+            relationshipReasons = JsonList(entity.RelationshipReasons),
+            relationshipCandidates = JsonCandidates(entity.RelationshipCandidates),
             triageConfidence = entity.TriageConfidence,
             extractionConfidence = entity.ExtractionConfidence,
             facts = new
@@ -111,6 +134,18 @@ public class GetContract
                 entity.ReviewedAt,
                 entity.ReviewedBy,
                 entity.ReviewNote,
+                entity.DeletedAt,
+                entity.DeletedBy,
+                entity.DeleteReason,
+            },
+            relationship = new
+            {
+                entity.RelationshipType,
+                entity.DuplicateOfCorrelationId,
+                entity.SupersedesCorrelationId,
+                relatedContractIds = JsonList(entity.RelatedContractIds),
+                relationshipReasons = JsonList(entity.RelationshipReasons),
+                relationshipCandidates = JsonCandidates(entity.RelationshipCandidates),
             },
             fields,
         });
@@ -135,4 +170,35 @@ public class GetContract
         try { return JsonSerializer.Deserialize<string[]>(json) ?? []; }
         catch (JsonException) { return []; }
     }
+
+    private static IReadOnlyList<object> JsonCandidates(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            var candidates = JsonSerializer.Deserialize<RelationshipCandidateDto[]>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+            return candidates.Select(c => new
+            {
+                correlationId = c.CorrelationId,
+                fileName = c.FileName,
+                documentType = c.DocumentType,
+                relationshipType = c.RelationshipType,
+                score = c.Score,
+                reasons = c.Reasons,
+            }).ToArray();
+        }
+        catch (JsonException) { return []; }
+    }
+
+    private record RelationshipCandidateDto(
+        string CorrelationId,
+        string FileName,
+        string DocumentType,
+        string RelationshipType,
+        int Score,
+        IReadOnlyList<string> Reasons);
 }
