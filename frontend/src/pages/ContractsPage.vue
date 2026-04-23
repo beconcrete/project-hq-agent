@@ -209,6 +209,7 @@
                 v-for="contract in contracts"
                 :key="contract.correlationId"
                 class="contract-item"
+                :class="{ 'contract-item--review': auth.hasRole('admin') && isPendingReview(contract) }"
               >
                 <div
                   class="contract-row"
@@ -298,17 +299,16 @@
                 >
                   <div class="review-panel-head">
                     <div>
-                      <strong>Review needed</strong>
+                      <strong>Review this upload</strong>
                       <p>{{ reviewSummary(contract) }}</p>
                     </div>
-                    <a :href="DOCS.contractCapabilities" target="_blank" rel="noreferrer">
-                      Review docs
-                    </a>
+                    <span class="review-panel-state">Admin action</span>
                   </div>
                   <div
                     v-if="relationshipCandidates(contract).length"
                     class="candidate-list"
                   >
+                    <div class="candidate-kicker">Possible related contract</div>
                     <button
                       v-for="candidate in relationshipCandidates(contract)"
                       :key="candidate.correlationId"
@@ -365,6 +365,10 @@
                       Reject, delete
                     </button>
                   </div>
+                  <p class="review-action-hint">
+                    Use replacement only when this upload should supersede the selected contract.
+                    Use extension when it is a related new period. Duplicate and reject hide this upload.
+                  </p>
                 </section>
               </div>
             </div>
@@ -473,11 +477,6 @@ const chatInputEl = ref(null);
 const promptHistory = ref([]);
 const historyIndex = ref(0);
 const selectedRelatedIds = ref({});
-
-const DOCS = {
-  contractCapabilities:
-    "https://github.com/beconcrete/project-hq-agent/blob/main/docs/contract-capabilities.md",
-};
 
 const suggestions = [
   "Which contracts expire next?",
@@ -946,7 +945,7 @@ function reviewSummary(contract) {
   if (candidates.length === 0)
     return "No close match was found. Approve as a new contract or reject and delete the upload.";
 
-  return "Possible duplicate, replacement, or extension found. Pick the related contract before choosing an action.";
+  return "A possible related contract was found. Select it, then decide whether this upload is new, an extension, a replacement, or a duplicate.";
 }
 
 function candidateLabel(candidate) {
@@ -956,6 +955,9 @@ function candidateLabel(candidate) {
 }
 
 function relationshipLabel(contract) {
+  if (isPendingReview(contract) && relationshipCandidates(contract).length)
+    return "Potential match found";
+
   const type = relationshipDisplay(contract.relationshipType);
   if (!type || contract.relationshipType === "new") return "";
   return type;
@@ -964,11 +966,11 @@ function relationshipLabel(contract) {
 function relationshipDisplay(type) {
   switch (type) {
     case "duplicate":
-      return "Likely duplicate";
+      return "Duplicate candidate";
     case "replacement":
-      return "Likely replacement";
+      return "Replacement candidate";
     case "extension":
-      return "Likely extension";
+      return "Extension candidate";
     case "unknown":
       return "Possible related contract";
     case "new":
@@ -1554,7 +1556,7 @@ textarea::placeholder {
 
 .contract-item {
   display: grid;
-  gap: 0.45rem;
+  gap: 0;
 }
 
 .contract-row {
@@ -1563,6 +1565,13 @@ textarea::placeholder {
   border: 1px solid #ebe5dc;
   border-radius: 8px;
   background: var(--paper);
+}
+
+.contract-item--review .contract-row {
+  border-color: #ead8aa;
+  border-bottom-color: transparent;
+  border-radius: 8px 8px 0 0;
+  background: #fffdf6;
 }
 
 .contract-row--processing {
@@ -1687,9 +1696,10 @@ textarea::placeholder {
 }
 
 .review-panel {
-  padding: 0.75rem;
+  padding: 0.8rem 0.85rem 0.85rem;
   border: 1px solid #ead8aa;
-  border-radius: 8px;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
   background: #fffaf0;
 }
 
@@ -1713,17 +1723,30 @@ textarea::placeholder {
 }
 
 .review-panel-head a {
+  display: none;
+}
+
+.review-panel-state,
+.candidate-kicker {
+  color: #8a5f11;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.review-panel-state {
   flex-shrink: 0;
-  color: var(--accent);
-  font-size: 0.74rem;
-  font-weight: 800;
-  text-decoration: none;
+  padding-top: 0.08rem;
 }
 
 .candidate-list {
   display: grid;
   gap: 0.4rem;
   margin-top: 0.65rem;
+}
+
+.candidate-kicker {
+  margin-bottom: 0.05rem;
 }
 
 .candidate {
@@ -1766,6 +1789,13 @@ textarea::placeholder {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.65rem;
+}
+
+.review-action-hint {
+  margin: 0.55rem 0 0;
+  color: #746f67;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 @keyframes spin {

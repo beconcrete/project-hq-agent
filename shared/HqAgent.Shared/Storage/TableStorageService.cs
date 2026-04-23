@@ -247,19 +247,22 @@ public class TableStorageService
         var score = 0;
 
         var sameFamily = SameFamily(current.DocumentType, existing.DocumentType);
+        var sameCounterparty = SameCounterparty(current, existing);
+        var samePeople = Overlaps(ParseJsonList(current.PeopleMentioned), ParseJsonList(existing.PeopleMentioned));
+
+        if (!sameCounterparty)
+            return null;
+
         if (sameFamily)
         {
             score += 2;
             reasons.Add("Same contract family.");
         }
 
-        if (SameCounterparty(current, existing))
-        {
-            score += 3;
-            reasons.Add("Same customer or counterparty.");
-        }
+        score += 3;
+        reasons.Add("Same customer or counterparty.");
 
-        if (Overlaps(ParseJsonList(current.PeopleMentioned), ParseJsonList(existing.PeopleMentioned)))
+        if (samePeople)
         {
             score += 3;
             reasons.Add("Same consultant, employee, contact, or signatory.");
@@ -300,14 +303,14 @@ public class TableStorageService
             reasons.Add("Payment, rate, or terms differ.");
         }
 
-        if (score < 5)
+        if (score < 6)
             return null;
 
-        var relationshipType = sameFamily && sameDates && score >= 9
+        var relationshipType = sameFamily && sameDates && (samePeople || !HasPeople(current, existing))
             ? "duplicate"
-            : overlappingDates
+            : sameFamily && samePeople && overlappingDates
                 ? "replacement"
-                : laterNonOverlapping
+                : sameFamily && samePeople && laterNonOverlapping
                     ? "extension"
                     : "unknown";
 
@@ -354,6 +357,9 @@ public class TableStorageService
 
         return Overlaps(leftNames, rightNames);
     }
+
+    private static bool HasPeople(ContractExtractionEntity left, ContractExtractionEntity right) =>
+        ParseJsonList(left.PeopleMentioned).Count > 0 || ParseJsonList(right.PeopleMentioned).Count > 0;
 
     private static bool Overlaps(IEnumerable<string> left, IEnumerable<string> right)
     {
