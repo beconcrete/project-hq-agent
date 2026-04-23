@@ -79,6 +79,9 @@ public class GetContract
             uploadedAt     = entity.UploadedAt,
             processedAt    = entity.ProcessedAt,
             status         = entity.Status,
+            statusMessage  = entity.StatusMessage,
+            lastError      = entity.LastError,
+            retryCount     = entity.RetryCount,
             documentType   = entity.DocumentType,
             effectiveDate = entity.EffectiveDate,
             expiryDate = entity.ExpiryDate,
@@ -94,9 +97,7 @@ public class GetContract
             paymentUnit = entity.PaymentUnit,
             paymentType = entity.PaymentType,
             paymentTerms = entity.PaymentTerms,
-            reviewState = string.IsNullOrWhiteSpace(entity.ReviewState)
-                ? (entity.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
-                : entity.ReviewState,
+            reviewState = NormalizeReviewState(entity),
             relationshipType = entity.RelationshipType,
             duplicateOfCorrelationId = entity.DuplicateOfCorrelationId,
             supersedesCorrelationId = entity.SupersedesCorrelationId,
@@ -128,9 +129,7 @@ public class GetContract
             },
             review = new
             {
-                state = string.IsNullOrWhiteSpace(entity.ReviewState)
-                    ? (entity.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
-                    : entity.ReviewState,
+                state = NormalizeReviewState(entity),
                 entity.ReviewedAt,
                 entity.ReviewedBy,
                 entity.ReviewNote,
@@ -201,4 +200,18 @@ public class GetContract
         string RelationshipType,
         int Score,
         IReadOnlyList<string> Reasons);
+
+    private static string NormalizeReviewState(HqAgent.Shared.Models.ContractExtractionEntity entity)
+    {
+        if (!string.IsNullOrWhiteSpace(entity.ReviewState))
+            return entity.ReviewState;
+
+        return entity.Status switch
+        {
+            "pending_review" => "pending_review",
+            "completed" => "approved_by_extraction",
+            "failed" => "failed",
+            _ => string.Empty
+        };
+    }
 }

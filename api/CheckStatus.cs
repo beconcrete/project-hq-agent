@@ -57,7 +57,14 @@ public class CheckStatus
             return await PlainResponse(req, HttpStatusCode.Forbidden, "Forbidden");
 
         var okRes = req.CreateResponse();
-        await okRes.WriteAsJsonAsync(new { correlationId, status = entity.Status });
+        await okRes.WriteAsJsonAsync(new
+        {
+            correlationId,
+            status = entity.Status,
+            statusMessage = entity.StatusMessage,
+            lastError = entity.LastError,
+            retryCount = entity.RetryCount,
+        });
         okRes.StatusCode = HttpStatusCode.OK;
         return okRes;
     }

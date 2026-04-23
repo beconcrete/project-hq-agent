@@ -250,10 +250,10 @@
                     </div>
                     <div class="contract-row-meta">
                       <template v-if="contract.status === 'processing'"
-                        >Extracting fields...</template
+                        >{{ contract.statusMessage || "Extracting fields..." }}</template
                       >
                       <template v-else-if="contract.status === 'failed'"
-                        >Extraction failed</template
+                        >{{ contract.lastError || contract.statusMessage || "Extraction failed" }}</template
                       >
                       <template v-else>
                         {{ contract.documentType || "Document" }} ·
@@ -558,15 +558,25 @@ async function pollStatus(correlationId) {
       },
     );
     if (!res.ok) return;
-    const { status } = await res.json();
-    if (status === "processing") return;
-
-    clearInterval(polls.get(correlationId));
-    polls.delete(correlationId);
+    const { status, statusMessage, lastError, retryCount } = await res.json();
 
     const idx = contracts.value.findIndex(
       (c) => c.correlationId === correlationId,
     );
+    if (idx !== -1) {
+      contracts.value[idx] = {
+        ...contracts.value[idx],
+        status,
+        statusMessage: statusMessage ?? contracts.value[idx].statusMessage,
+        lastError: lastError ?? contracts.value[idx].lastError,
+        retryCount: retryCount ?? contracts.value[idx].retryCount,
+      };
+    }
+
+    if (status === "processing") return;
+
+    clearInterval(polls.get(correlationId));
+    polls.delete(correlationId);
     if (idx === -1) return;
     if (status === "completed" || status === "pending_review") {
       const detail = await fetchDetail(correlationId);
@@ -882,8 +892,13 @@ async function uploadFiles(files) {
         body: form,
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Upload failed (${res.status})`);
+        const text = await res.text().catch(() => "");
+        let message = text.trim();
+        if (!message) {
+          const body = await res.json().catch(() => ({}));
+          message = body.error || body.message || "";
+        }
+        throw new Error(message || `Upload failed (${res.status})`);
       }
       const data = await res.json();
       contracts.value.unshift({
@@ -891,6 +906,7 @@ async function uploadFiles(files) {
         fileName: data.fileName,
         uploadedAt: new Date().toISOString(),
         status: "processing",
+        statusMessage: "Uploading complete. Queued for extraction.",
         documentType: "",
       });
       startPolling(data.correlationId);

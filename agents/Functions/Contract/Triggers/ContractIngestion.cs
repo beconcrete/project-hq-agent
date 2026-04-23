@@ -28,6 +28,15 @@ public class ContractIngestion
         FunctionContext context)
     {
         _logger.LogInformation("ContractIngestion triggered for {CorrelationId}", msg.CorrelationId);
+        var retryCount = GetRetryCount(context);
+        var processingLabel = retryCount > 1
+            ? $"Retrying extraction (attempt {retryCount})."
+            : "Extracting contract.";
+        await _table.WriteProcessingAsync(
+            msg,
+            processingLabel,
+            retryCount: retryCount,
+            ct: context.CancellationToken);
 
         ExtractionResult extraction;
         try
@@ -37,7 +46,12 @@ public class ContractIngestion
         catch (Exception ex)
         {
             _logger.LogError(ex, "ContractIngestion failed for {CorrelationId}: {Message}", msg.CorrelationId, ex.Message);
-            await _table.WriteFailedAsync(msg, context.CancellationToken);
+            await _table.WriteProcessingAsync(
+                msg,
+                "Retry scheduled after extraction error.",
+                lastError: ex.Message,
+                retryCount: retryCount,
+                ct: context.CancellationToken);
             throw;
         }
 
@@ -46,5 +60,16 @@ public class ContractIngestion
         _logger.LogInformation(
             "Contract {CorrelationId} stored — type:{DocumentType} pendingReview:{Pending} model:{Model}",
             msg.CorrelationId, extraction.DocumentType, extraction.PendingReview, extraction.ModelUsed);
+    }
+
+    private static int GetRetryCount(FunctionContext context)
+    {
+        if (context.BindingContext.BindingData.TryGetValue("DequeueCount", out var dequeueCount) &&
+            dequeueCount is not null &&
+            int.TryParse(dequeueCount.ToString(), out var parsed) &&
+            parsed > 0)
+            return parsed;
+
+        return 1;
     }
 }

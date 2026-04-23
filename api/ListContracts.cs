@@ -48,6 +48,9 @@ public class ListContracts
             fileName      = e.FileName,
             uploadedAt    = e.UploadedAt,
             status        = e.Status,
+            statusMessage = e.StatusMessage,
+            lastError     = e.LastError,
+            retryCount    = e.RetryCount,
             documentType  = e.DocumentType,
             effectiveDate = e.EffectiveDate,
             expiryDate    = e.ExpiryDate,
@@ -63,9 +66,7 @@ public class ListContracts
             paymentUnit = e.PaymentUnit,
             paymentType = e.PaymentType,
             paymentTerms = e.PaymentTerms,
-            reviewState = string.IsNullOrWhiteSpace(e.ReviewState)
-                ? (e.Status == "pending_review" ? "pending_review" : "approved_by_extraction")
-                : e.ReviewState,
+            reviewState = NormalizeReviewState(e),
             reviewedAt = e.ReviewedAt,
             reviewedBy = e.ReviewedBy,
             relationshipType = e.RelationshipType,
@@ -130,4 +131,18 @@ public class ListContracts
         string RelationshipType,
         int Score,
         IReadOnlyList<string> Reasons);
+
+    private static string NormalizeReviewState(HqAgent.Shared.Models.ContractExtractionEntity entity)
+    {
+        if (!string.IsNullOrWhiteSpace(entity.ReviewState))
+            return entity.ReviewState;
+
+        return entity.Status switch
+        {
+            "pending_review" => "pending_review",
+            "completed" => "approved_by_extraction",
+            "failed" => "failed",
+            _ => string.Empty
+        };
+    }
 }

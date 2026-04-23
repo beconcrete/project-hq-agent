@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
@@ -112,14 +113,13 @@ public class UploadContract
         if (fileBytes is null || fileName is null)
             return await PlainResponse(req, HttpStatusCode.BadRequest, "No file found in request");
 
-        // Validate file extension
-        var ext = Path.GetExtension(fileName);
-        if (!AllowedExtensions.Contains(ext))
+        var ext = ResolveFileExtension(fileName, fileContentType);
+        if (ext is null)
             return await PlainResponse(req, HttpStatusCode.BadRequest, "Only PDF and DOCX files are accepted");
 
-        // Upload to blob storage: contracts/{correlationId}/{fileName}
+        // Upload to blob storage with a safe internal blob name while preserving the original filename elsewhere.
         var correlationId = Guid.NewGuid().ToString();
-        var blobName = $"{correlationId}/{fileName}";
+        var blobName = $"{correlationId}/document{ext}";
 
         var containerClient = new BlobServiceClient(_storageConnectionString)
             .GetBlobContainerClient("contracts");
@@ -135,7 +135,7 @@ public class UploadContract
                 {
                     { "userId", userId },
                     { "correlationId", correlationId },
-                    { "originalFileName", fileName }
+                    { "originalFileNameBase64", Convert.ToBase64String(Encoding.UTF8.GetBytes(fileName)) }
                 }
             });
 
@@ -159,6 +159,20 @@ public class UploadContract
         await res.WriteAsJsonAsync(new { correlationId, blobName, fileName, status = "processing" });
         res.StatusCode = HttpStatusCode.OK;
         return res;
+    }
+
+    private static string? ResolveFileExtension(string fileName, string? contentType)
+    {
+        var ext = Path.GetExtension(fileName);
+        if (AllowedExtensions.Contains(ext))
+            return ext.ToLowerInvariant();
+
+        return contentType?.ToLowerInvariant() switch
+        {
+            "application/pdf" => ".pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
+            _ => null
+        };
     }
 
     private static async Task<HttpResponseData> PlainResponse(

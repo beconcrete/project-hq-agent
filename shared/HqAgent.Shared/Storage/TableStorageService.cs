@@ -57,6 +57,9 @@ public class TableStorageService
             ModelUsed        = extraction.ModelUsed,
             ProcessedAt      = DateTime.UtcNow,
             Status           = extraction.PendingReview ? "pending_review" : "completed",
+            StatusMessage    = extraction.PendingReview ? "Needs review before approval." : "Extraction completed.",
+            LastError        = string.Empty,
+            RetryCount       = null,
             ReviewState      = extraction.PendingReview ? "pending_review" : "approved_by_extraction",
         };
 
@@ -82,25 +85,95 @@ public class TableStorageService
             message.CorrelationId, extraction.DocumentType, entity.Status);
     }
 
-    public async Task WriteFailedAsync(
+    public async Task WriteProcessingAsync(
         ContractMessage   message,
+        string            statusMessage,
+        string?           lastError = null,
+        int?              retryCount = null,
         CancellationToken ct = default)
     {
-        var entity = new ContractExtractionEntity
-        {
-            PartitionKey = message.CorrelationId,
-            RowKey       = "extraction",
-            BlobPath     = message.BlobName,
-            UserId       = message.UserId,
-            FileName     = message.FileName,
-            UploadedAt   = message.UploadedAt,
-            ProcessedAt  = DateTime.UtcNow,
-            Status       = "failed",
-            ReviewState  = "failed",
-        };
-
         var table = _client.GetTableClient(TableName);
         await table.CreateIfNotExistsAsync(cancellationToken: ct);
+
+        ContractExtractionEntity entity;
+        try
+        {
+            entity = (await table.GetEntityAsync<ContractExtractionEntity>(
+                message.CorrelationId, "extraction", cancellationToken: ct)).Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            entity = new ContractExtractionEntity
+            {
+                PartitionKey = message.CorrelationId,
+                RowKey       = "extraction",
+                BlobPath     = message.BlobName,
+                UserId       = message.UserId,
+                FileName     = message.FileName,
+                UploadedAt   = message.UploadedAt,
+            };
+        }
+
+        entity.BlobPath = message.BlobName;
+        entity.UserId = message.UserId;
+        entity.FileName = message.FileName;
+        entity.UploadedAt = message.UploadedAt;
+        entity.ProcessedAt = DateTime.UtcNow;
+        entity.Status = "processing";
+        entity.StatusMessage = statusMessage;
+        entity.ReviewState = string.Empty;
+        entity.RetryCount = retryCount;
+        if (!string.IsNullOrWhiteSpace(lastError))
+            entity.LastError = Truncate(lastError, 2048);
+
+        await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
+
+        _logger.LogInformation(
+            "Updated processing record — correlationId:{CorrelationId} status:{StatusMessage} retryCount:{RetryCount}",
+            message.CorrelationId, statusMessage, retryCount);
+    }
+
+    public async Task WriteFailedAsync(
+        ContractMessage   message,
+        string?           errorMessage = null,
+        int?              retryCount = null,
+        CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableName);
+        await table.CreateIfNotExistsAsync(cancellationToken: ct);
+
+        ContractExtractionEntity entity;
+        try
+        {
+            entity = (await table.GetEntityAsync<ContractExtractionEntity>(
+                message.CorrelationId, "extraction", cancellationToken: ct)).Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            entity = new ContractExtractionEntity
+            {
+                PartitionKey = message.CorrelationId,
+                RowKey       = "extraction",
+                BlobPath     = message.BlobName,
+                UserId       = message.UserId,
+                FileName     = message.FileName,
+                UploadedAt   = message.UploadedAt,
+            };
+        }
+
+        entity.BlobPath = message.BlobName;
+        entity.UserId = message.UserId;
+        entity.FileName = message.FileName;
+        entity.UploadedAt = message.UploadedAt;
+        entity.ProcessedAt = DateTime.UtcNow;
+        entity.Status = "failed";
+        entity.StatusMessage = "Extraction failed.";
+        entity.ReviewState = "failed";
+        entity.RetryCount = retryCount ?? entity.RetryCount;
+        entity.LastError = Truncate(
+            string.IsNullOrWhiteSpace(errorMessage) ? entity.LastError : errorMessage,
+            2048);
+
         await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
 
         _logger.LogInformation(
@@ -214,6 +287,9 @@ public class TableStorageService
         entity.Status == "deleted" ||
         entity.ReviewState is "rejected" or "duplicate_deleted" ||
         entity.DeletedAt.HasValue;
+
+    private static string Truncate(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength];
 
     private static async Task<IReadOnlyList<ContractRelationshipCandidate>> FindRelationshipCandidatesAsync(
         TableClient table,

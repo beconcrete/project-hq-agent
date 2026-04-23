@@ -48,6 +48,9 @@ public class ContractExtractionEntity : ITableEntity
     public string    ModelUsed            { get; set; } = string.Empty;
     public DateTime? ProcessedAt         { get; set; }
     public string    Status              { get; set; } = string.Empty;
+    public string    StatusMessage       { get; set; } = string.Empty;
+    public string    LastError           { get; set; } = string.Empty;
+    public int?      RetryCount          { get; set; }
     public string    ReviewState          { get; set; } = string.Empty;
     public DateTime? ReviewedAt          { get; set; }
     public string    ReviewedBy          { get; set; } = string.Empty;
