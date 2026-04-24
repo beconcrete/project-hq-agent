@@ -40,6 +40,9 @@
 |---|---|
 | `Contracts` | Contract records with original extraction JSON plus normalized query fields such as dates, counterparties, people, renewal, assignment, payment, risk, status, blob path, owner, and visibility |
 | `ContractChatHistory` | Contract chat turns stored by `ContractChatAgent` per chat session |
+| `Employees` | HR employee records: name, email, start date, status, base salary, billing rate, vacation balance |
+| `HRConfig` | Single row (`hrconfig`/`default`) with formula params: `BonusThreshold` (default 30), `UtilizationTarget` (default 85). Read live on every salary call — update here to change the formula immediately |
+| `HRChatHistory` | HR chat turns stored by `HRChatAgent` per chat session |
 
 ## Runtime Split
 
@@ -126,6 +129,25 @@ Frontend
 |---|---|---|---|
 | `ContractChat` | HTTP trigger, function auth | `POST /api/contract-chat` | `HqAgent.Agents.Contract.Triggers.ContractChatFunction.Run` |
 | `ContractIngestion` | Queue trigger | `contract-processing` | `HqAgent.Agents.Contract.Triggers.ContractIngestion.Run` |
+| `HRChat` | HTTP trigger, function auth | `POST /api/hr-chat` | `HqAgent.Agents.HR.Triggers.HRChatFunction.Run` |
+
+### HR Chat
+
+```
+Frontend (/hr — admin only)
+  → POST /api/hr-chat
+  → [SWA-managed api/HRChat]
+      - validates admin role via RoleGuard (Roles.Admin)
+      - forwards identity headers to hq-agent-function-app
+      - calls /api/hr-chat using CHAT_AGENT_KEY
+
+  → [hq-agent-function-app / HRChat]
+      - HRChatAgent answers using employee tools
+      - reads Employees and HRConfig tables from hqagentstorage
+      - salary formula params always read live from HRConfig — never cached
+      - writes chat turns to HRChatHistory
+      - returns answer
+```
 
 ## Notable Decisions
 
