@@ -40,6 +40,7 @@ public class HRChatAgent
         When asked about salary for a specific person: call find_employee first to get the employeeId, then calculate_salary.
         When asked about salary for yourself or "my salary": call find_employee with the name of the person asking.
         When asked what the Standard Hours Deduction or utilization target is: call get_hr_config.
+        When find_employee returns multiple matches: list the matches and ask the user to clarify which person they mean. Never pick one arbitrarily.
 
         Only answer HR-related questions. If the question is outside the HR domain, say:
         "I can only help with HR and employee-related questions."
@@ -187,10 +188,9 @@ public class HRChatAgent
         var nameOrEmail = ParseArg(call.FunctionArguments, "nameOrEmail");
         if (nameOrEmail is null) return "Missing nameOrEmail argument";
 
-        var employee = await _hr.FindEmployeeAsync(nameOrEmail, ct);
-        return employee is null
-            ? $"No employee found matching '{nameOrEmail}'"
-            : JsonSerializer.Serialize(employee);
+        var matches = await _hr.FindEmployeesAsync(nameOrEmail, ct);
+        if (matches.Count == 0) return $"No employee found matching '{nameOrEmail}'";
+        return JsonSerializer.Serialize(matches);
     }
 
     private async Task<string> AddEmployeeToolAsync(ChatToolCall call, CancellationToken ct)

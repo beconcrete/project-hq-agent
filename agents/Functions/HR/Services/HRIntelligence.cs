@@ -21,16 +21,17 @@ public class HRIntelligence : IHRIntelligence
         return employees.Select(ToSummary).ToList();
     }
 
-    public async Task<EmployeeSummary?> FindEmployeeAsync(string nameOrEmail, CancellationToken ct)
+    public async Task<IReadOnlyList<EmployeeSummary>> FindEmployeesAsync(string nameOrEmail, CancellationToken ct)
     {
         var employees = await _storage.ListEmployeesAsync(includeOffboarded: true, ct);
         var normalized = nameOrEmail.Trim().ToLowerInvariant();
 
-        var match = employees.FirstOrDefault(e =>
-            e.FullName.ToLowerInvariant().Contains(normalized) ||
-            e.Email.ToLowerInvariant().Contains(normalized));
-
-        return match is null ? null : ToSummary(match);
+        return employees
+            .Where(e =>
+                e.FullName.ToLowerInvariant().Contains(normalized) ||
+                e.Email.ToLowerInvariant().Contains(normalized))
+            .Select(ToSummary)
+            .ToList();
     }
 
     public async Task<EmployeeSummary> AddEmployeeAsync(AddEmployeeRequest request, CancellationToken ct)
