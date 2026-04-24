@@ -14,6 +14,6 @@ public class HRConfigEntity : ITableEntity
     // Hours above which billing bonus applies: BaseSalary + BillingBaseRate × (hoursBilled − BonusThreshold)
     public int BonusThreshold { get; set; } = 30;
 
-    // Target utilization percentage (e.g. 85 = 85%)
-    public decimal UtilizationTarget { get; set; } = 85;
+    // Target utilization percentage (e.g. 85 = 85%) — double because Table Storage does not support decimal
+    public double UtilizationTarget { get; set; } = 85;
 }

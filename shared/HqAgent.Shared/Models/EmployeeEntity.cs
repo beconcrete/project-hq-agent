@@ -16,7 +16,7 @@ public class EmployeeEntity : ITableEntity
     public DateTimeOffset StartDate { get; set; }
     public string Status { get; set; } = "active"; // "active" | "offboarded"
     public DateTimeOffset? OffboardDate { get; set; }
-    public decimal BaseSalary { get; set; }       // SEK
-    public decimal BillingBaseRate { get; set; }  // SEK/hr
+    public double BaseSalary { get; set; }       // SEK — double because Table Storage does not support decimal
+    public double BillingBaseRate { get; set; }  // SEK/hr
     public int VacationBalance { get; set; } = 30; // days
 }

@@ -31,7 +31,7 @@ public class HRChatAgent
         Available tools:
         - list_employees: list all active employees
         - find_employee: find an employee by name or email
-        - add_employee: add a new employee (requires full name, email, start date, base salary in SEK, billing base rate in SEK/hr)
+        - add_employee: add a new employee (requires full name, email, start date, base salary in SEK, Billing Base Rate in SEK/hr)
         - update_employee: update one or more fields on an existing employee
         - offboard_employee: mark an employee as offboarded with their last day
         - calculate_salary: calculate monthly salary for an employee given hours billed — always use this
@@ -60,7 +60,7 @@ public class HRChatAgent
         ChatTool.CreateFunctionTool(
             "add_employee",
             "Add a new employee record.",
-            BinaryData.FromString("""{"type":"object","properties":{"fullName":{"type":"string"},"email":{"type":"string"},"startDate":{"type":"string","description":"ISO date, e.g. 2026-05-01"},"baseSalary":{"type":"number","description":"Monthly base salary in SEK"},"billingBaseRate":{"type":"number","description":"Billing rate in SEK per hour"},"vacationBalance":{"type":"integer","description":"Vacation days, default 30"}},"required":["fullName","email","startDate","baseSalary","billingBaseRate"]}""")),
+            BinaryData.FromString("""{"type":"object","properties":{"fullName":{"type":"string"},"email":{"type":"string"},"startDate":{"type":"string","description":"ISO date, e.g. 2026-05-01"},"baseSalary":{"type":"number","description":"Monthly base salary in SEK"},"billingBaseRate":{"type":"number","description":"Billing Base Rate in SEK per hour — the rate applied to hours billed above the bonus threshold"},"vacationBalance":{"type":"integer","description":"Vacation days, default 30"}},"required":["fullName","email","startDate","baseSalary","billingBaseRate"]}""")),
 
         ChatTool.CreateFunctionTool(
             "update_employee",

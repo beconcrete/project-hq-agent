@@ -42,8 +42,8 @@ public class HRIntelligence : IHRIntelligence
             Email           = request.Email,
             StartDate       = request.StartDate,
             Status          = "active",
-            BaseSalary      = request.BaseSalary,
-            BillingBaseRate = request.BillingBaseRate,
+            BaseSalary      = (double)request.BaseSalary,
+            BillingBaseRate = (double)request.BillingBaseRate,
             VacationBalance = request.VacationBalance,
         };
 
@@ -61,8 +61,8 @@ public class HRIntelligence : IHRIntelligence
         if (request.FullName        is not null) entity.FullName        = request.FullName;
         if (request.Email           is not null) entity.Email           = request.Email;
         if (request.StartDate       is not null) entity.StartDate       = request.StartDate.Value;
-        if (request.BaseSalary      is not null) entity.BaseSalary      = request.BaseSalary.Value;
-        if (request.BillingBaseRate is not null) entity.BillingBaseRate = request.BillingBaseRate.Value;
+        if (request.BaseSalary      is not null) entity.BaseSalary      = (double)request.BaseSalary.Value;
+        if (request.BillingBaseRate is not null) entity.BillingBaseRate = (double)request.BillingBaseRate.Value;
         if (request.VacationBalance is not null) entity.VacationBalance = request.VacationBalance.Value;
 
         await _storage.WriteEmployeeAsync(entity, ct);
@@ -93,8 +93,8 @@ public class HRIntelligence : IHRIntelligence
         var config = await _storage.GetHRConfigAsync(ct);
 
         var calc = HRSalaryCalculator.Calculate(
-            entity.BaseSalary,
-            entity.BillingBaseRate,
+            (decimal)entity.BaseSalary,
+            (decimal)entity.BillingBaseRate,
             hoursBilled,
             config.BonusThreshold);
 
@@ -114,7 +114,7 @@ public class HRIntelligence : IHRIntelligence
     public async Task<HRConfigSummary> GetHRConfigAsync(CancellationToken ct)
     {
         var config = await _storage.GetHRConfigAsync(ct);
-        return new HRConfigSummary(config.BonusThreshold, config.UtilizationTarget);
+        return new HRConfigSummary(config.BonusThreshold, (decimal)config.UtilizationTarget);
     }
 
     private static EmployeeSummary ToSummary(EmployeeEntity e) => new(
@@ -124,7 +124,7 @@ public class HRIntelligence : IHRIntelligence
         StartDate:      e.StartDate,
         Status:         e.Status,
         OffboardDate:   e.OffboardDate,
-        BaseSalary:     e.BaseSalary,
-        BillingBaseRate: e.BillingBaseRate,
+        BaseSalary:     (decimal)e.BaseSalary,
+        BillingBaseRate: (decimal)e.BillingBaseRate,
         VacationBalance: e.VacationBalance);
 }
