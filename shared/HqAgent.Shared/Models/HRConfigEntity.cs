@@ -11,8 +11,8 @@ public class HRConfigEntity : ITableEntity
     public DateTimeOffset? Timestamp { get; set; }
     public ETag ETag { get; set; }
 
-    // Hours above which billing bonus applies: BaseSalary + BillingBaseRate × (hoursBilled − BonusThreshold)
-    public int BonusThreshold { get; set; } = 30;
+    // Hours deducted from billed hours before Flexible Salary applies: BaseSalary + BillingBaseRate × (hoursBilled − StandardHoursDeduction)
+    public int StandardHoursDeduction { get; set; } = 30;
 
     // Target utilization percentage (e.g. 85 = 85%) — double because Table Storage does not support decimal
     public double UtilizationTarget { get; set; } = 85;

@@ -4,25 +4,25 @@ public static class HRSalaryCalculator
 {
     /// <summary>
     /// Calculates monthly salary and returns a structured result with full breakdown.
-    /// Formula: BaseSalary + (BillingBaseRate × max(0, hoursBilled − bonusThreshold))
+    /// Formula: BaseSalary + (BillingBaseRate × max(0, hoursBilled − standardHoursDeduction))
     /// </summary>
     public static SalaryCalculation Calculate(
         decimal baseSalary,
         decimal billingBaseRate,
         decimal hoursBilled,
-        int bonusThreshold)
+        int standardHoursDeduction)
     {
-        var billableHours = Math.Max(0, hoursBilled - bonusThreshold);
-        var bonus = billingBaseRate * billableHours;
-        var total = baseSalary + bonus;
+        var eligibleHours = Math.Max(0, hoursBilled - standardHoursDeduction);
+        var flexibleSalary = billingBaseRate * eligibleHours;
+        var total = baseSalary + flexibleSalary;
 
         return new SalaryCalculation(
             BaseSalary: baseSalary,
             BillingBaseRate: billingBaseRate,
             HoursBilled: hoursBilled,
-            BonusThreshold: bonusThreshold,
-            BillableHours: billableHours,
-            Bonus: bonus,
+            StandardHoursDeduction: standardHoursDeduction,
+            EligibleHours: eligibleHours,
+            FlexibleSalary: flexibleSalary,
             TotalSalary: total);
     }
 }
@@ -31,12 +31,12 @@ public record SalaryCalculation(
     decimal BaseSalary,
     decimal BillingBaseRate,
     decimal HoursBilled,
-    int BonusThreshold,
-    decimal BillableHours,
-    decimal Bonus,
+    int StandardHoursDeduction,
+    decimal EligibleHours,
+    decimal FlexibleSalary,
     decimal TotalSalary)
 {
     public string FormatSEK() =>
-        $"Om du fakturerar {HoursBilled} timmar blir din lön {TotalSalary:N0} kr\n" +
-        $"Grundlön: {BaseSalary:N0} kr + Faktureringsbonus: {BillingBaseRate:N0} kr/tim × ({HoursBilled} − {BonusThreshold} tim) = {Bonus:N0} kr";
+        $"If you bill {HoursBilled} hours, your salary would be {TotalSalary:N0} kr\n" +
+        $"Base salary: {BaseSalary:N0} kr + Flexible Salary: {BillingBaseRate:N0} kr/hr × ({HoursBilled} − {StandardHoursDeduction} eligible hrs) = {FlexibleSalary:N0} kr";
 }

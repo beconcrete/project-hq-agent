@@ -96,25 +96,25 @@ public class HRIntelligence : IHRIntelligence
             (decimal)entity.BaseSalary,
             (decimal)entity.BillingBaseRate,
             hoursBilled,
-            config.BonusThreshold);
+            config.StandardHoursDeduction);
 
         return new SalaryResult(
-            EmployeeId:     employeeId,
-            FullName:       entity.FullName,
-            HoursBilled:    hoursBilled,
-            BaseSalary:     calc.BaseSalary,
-            BillingBaseRate: calc.BillingBaseRate,
-            BonusThreshold: calc.BonusThreshold,
-            BillableHours:  calc.BillableHours,
-            Bonus:          calc.Bonus,
-            TotalSalary:    calc.TotalSalary,
-            Breakdown:      calc.FormatSEK());
+            EmployeeId:            employeeId,
+            FullName:              entity.FullName,
+            HoursBilled:           hoursBilled,
+            BaseSalary:            calc.BaseSalary,
+            BillingBaseRate:       calc.BillingBaseRate,
+            StandardHoursDeduction: calc.StandardHoursDeduction,
+            EligibleHours:         calc.EligibleHours,
+            FlexibleSalary:        calc.FlexibleSalary,
+            TotalSalary:           calc.TotalSalary,
+            Breakdown:             calc.FormatSEK());
     }
 
     public async Task<HRConfigSummary> GetHRConfigAsync(CancellationToken ct)
     {
         var config = await _storage.GetHRConfigAsync(ct);
-        return new HRConfigSummary(config.BonusThreshold, (decimal)config.UtilizationTarget);
+        return new HRConfigSummary(config.StandardHoursDeduction, (decimal)config.UtilizationTarget);
     }
 
     private static EmployeeSummary ToSummary(EmployeeEntity e) => new(

@@ -78,7 +78,7 @@ public class HRTableStorageService
         {
             var defaults = new HRConfigEntity();
             await table.UpsertEntityAsync(defaults, TableUpdateMode.Replace, ct);
-            _logger.LogInformation("HRConfig row not found — seeded defaults (BonusThreshold={BonusThreshold}, UtilizationTarget={UtilizationTarget})", defaults.BonusThreshold, defaults.UtilizationTarget);
+            _logger.LogInformation("HRConfig row not found — seeded defaults (StandardHoursDeduction={StandardHoursDeduction}, UtilizationTarget={UtilizationTarget})", defaults.StandardHoursDeduction, defaults.UtilizationTarget);
             return defaults;
         }
     }
@@ -92,6 +92,6 @@ public class HRTableStorageService
         entity.RowKey = "default";
 
         await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
-        _logger.LogInformation("Updated HRConfig: BonusThreshold={BonusThreshold}, UtilizationTarget={UtilizationTarget}", entity.BonusThreshold, entity.UtilizationTarget);
+        _logger.LogInformation("Updated HRConfig: StandardHoursDeduction={StandardHoursDeduction}, UtilizationTarget={UtilizationTarget}", entity.StandardHoursDeduction, entity.UtilizationTarget);
     }
 }

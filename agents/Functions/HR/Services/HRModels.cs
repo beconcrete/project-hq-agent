@@ -17,14 +17,14 @@ public record SalaryResult(
     decimal HoursBilled,
     decimal BaseSalary,
     decimal BillingBaseRate,
-    int BonusThreshold,
-    decimal BillableHours,
-    decimal Bonus,
+    int StandardHoursDeduction,
+    decimal EligibleHours,
+    decimal FlexibleSalary,
     decimal TotalSalary,
     string Breakdown);
 
 public record HRConfigSummary(
-    int BonusThreshold,
+    int StandardHoursDeduction,
     decimal UtilizationTarget);
 
 public record AddEmployeeRequest(

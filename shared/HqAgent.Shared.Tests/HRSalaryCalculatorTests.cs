@@ -12,12 +12,12 @@ public class HRSalaryCalculatorTests
             baseSalary: 45_000,
             billingBaseRate: 950,
             hoursBilled: 160,
-            bonusThreshold: 30);
+            standardHoursDeduction: 30);
 
         // 45000 + (950 × (160 − 30)) = 45000 + 123500 = 168500
         Assert.Equal(45_000m, result.BaseSalary);
-        Assert.Equal(130m, result.BillableHours);
-        Assert.Equal(123_500m, result.Bonus);
+        Assert.Equal(130m, result.EligibleHours);
+        Assert.Equal(123_500m, result.FlexibleSalary);
         Assert.Equal(168_500m, result.TotalSalary);
     }
 
@@ -28,10 +28,10 @@ public class HRSalaryCalculatorTests
             baseSalary: 45_000,
             billingBaseRate: 950,
             hoursBilled: 30,
-            bonusThreshold: 30);
+            standardHoursDeduction: 30);
 
-        Assert.Equal(0m, result.BillableHours);
-        Assert.Equal(0m, result.Bonus);
+        Assert.Equal(0m, result.EligibleHours);
+        Assert.Equal(0m, result.FlexibleSalary);
         Assert.Equal(45_000m, result.TotalSalary);
     }
 
@@ -42,9 +42,9 @@ public class HRSalaryCalculatorTests
             baseSalary: 45_000,
             billingBaseRate: 950,
             hoursBilled: 10,
-            bonusThreshold: 30);
+            standardHoursDeduction: 30);
 
-        Assert.Equal(0m, result.BillableHours);
+        Assert.Equal(0m, result.EligibleHours);
         Assert.Equal(45_000m, result.TotalSalary);
     }
 
@@ -56,11 +56,11 @@ public class HRSalaryCalculatorTests
             baseSalary: 50_000,
             billingBaseRate: 1_000,
             hoursBilled: 160,
-            bonusThreshold: 40);
+            standardHoursDeduction: 40);
 
         // 50000 + (1000 × (160 − 40)) = 50000 + 120000 = 170000
-        Assert.Equal(120m, result.BillableHours);
-        Assert.Equal(120_000m, result.Bonus);
+        Assert.Equal(120m, result.EligibleHours);
+        Assert.Equal(120_000m, result.FlexibleSalary);
         Assert.Equal(170_000m, result.TotalSalary);
     }
 

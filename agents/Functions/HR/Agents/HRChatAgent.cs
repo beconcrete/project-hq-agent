@@ -20,13 +20,13 @@ public class HRChatAgent
         You are an HR assistant for this company. You manage employees and answer HR-related questions.
 
         IMPORTANT RULES — follow these without exception:
-        - Never calculate salary, bonus, or utilization from memory or assumptions.
+        - Never calculate salary, Flexible Salary, or utilization from memory or assumptions.
           Always call calculate_salary. The formula and thresholds come from Table Storage and may have changed.
-        - Never state the bonus threshold or utilization target from memory.
+        - Never state the Standard Hours Deduction or utilization target from memory.
           Always call get_hr_config to read the current values.
         - Always present monetary amounts in SEK (kr).
         - Always show the full salary breakdown when answering salary questions, including:
-          base salary, billing rate, hours billed, bonus threshold, billable hours, bonus, and total.
+          base salary, Billing Base Rate, hours billed, Standard Hours Deduction, eligible hours, Flexible Salary, and total.
 
         Available tools:
         - list_employees: list all active employees
@@ -35,11 +35,11 @@ public class HRChatAgent
         - update_employee: update one or more fields on an existing employee
         - offboard_employee: mark an employee as offboarded with their last day
         - calculate_salary: calculate monthly salary for an employee given hours billed — always use this
-        - get_hr_config: read current bonus threshold and utilization target from storage — always use this
+        - get_hr_config: read current Standard Hours Deduction and utilization target from storage — always use this
 
         When asked about salary for a specific person: call find_employee first to get the employeeId, then calculate_salary.
         When asked about salary for yourself or "my salary": call find_employee with the name of the person asking.
-        When asked what the bonus threshold or utilization target is: call get_hr_config.
+        When asked what the Standard Hours Deduction or utilization target is: call get_hr_config.
 
         Only answer HR-related questions. If the question is outside the HR domain, say:
         "I can only help with HR and employee-related questions."
@@ -60,7 +60,7 @@ public class HRChatAgent
         ChatTool.CreateFunctionTool(
             "add_employee",
             "Add a new employee record.",
-            BinaryData.FromString("""{"type":"object","properties":{"fullName":{"type":"string"},"email":{"type":"string"},"startDate":{"type":"string","description":"ISO date, e.g. 2026-05-01"},"baseSalary":{"type":"number","description":"Monthly base salary in SEK"},"billingBaseRate":{"type":"number","description":"Billing Base Rate in SEK per hour — the rate applied to hours billed above the bonus threshold"},"vacationBalance":{"type":"integer","description":"Vacation days, default 30"}},"required":["fullName","email","startDate","baseSalary","billingBaseRate"]}""")),
+            BinaryData.FromString("""{"type":"object","properties":{"fullName":{"type":"string"},"email":{"type":"string"},"startDate":{"type":"string","description":"ISO date, e.g. 2026-05-01"},"baseSalary":{"type":"number","description":"Monthly base salary in SEK"},"billingBaseRate":{"type":"number","description":"Billing Base Rate in SEK per hour — the rate applied to hours billed above the Standard Hours Deduction"},"vacationBalance":{"type":"integer","description":"Vacation days, default 30"}},"required":["fullName","email","startDate","baseSalary","billingBaseRate"]}""")),
 
         ChatTool.CreateFunctionTool(
             "update_employee",
@@ -79,7 +79,7 @@ public class HRChatAgent
 
         ChatTool.CreateFunctionTool(
             "get_hr_config",
-            "Get current HR config from storage: bonus threshold (hours) and utilization target (%). Always call this before stating any threshold or target.",
+            "Get current HR config from storage: Standard Hours Deduction (hours) and utilization target (%). Always call this before stating any threshold or target.",
             BinaryData.FromString("""{"type":"object","properties":{},"required":[]}""")),
     ];
 
