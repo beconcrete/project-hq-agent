@@ -154,18 +154,29 @@ async function sendMessage() {
       },
       body: JSON.stringify({ sessionId: sessionId.value, message: msg }),
     });
-    if (!res.ok) throw new Error(`Chat failed (${res.status})`);
+    if (!res.ok) throw res;
     const data = await res.json();
     chatMessages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
       content: data.answer,
     });
-  } catch {
+  } catch (err) {
+    const status = err?.status ?? 0;
+    const content =
+      status === 401
+        ? "Your session has expired. Please refresh the page and sign in again."
+        : status === 403
+          ? "Access denied. Admin role is required to use HR."
+          : status === 503
+            ? "The HR service is temporarily unavailable. Please try again shortly."
+            : status >= 400
+              ? `Request failed (${status}). Please try again.`
+              : "Could not reach the server. Check your connection and try again.";
     chatMessages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "Something went wrong. Please try again.",
+      content,
       error: true,
     });
   } finally {

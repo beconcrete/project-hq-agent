@@ -160,7 +160,11 @@
     <section v-if="attentionContracts.length" class="attention-strip">
       <div>
         <span class="attention-kicker">Needs attention</span>
-        <strong>{{ attentionContracts.length }} contract{{ attentionContracts.length === 1 ? "" : "s" }}</strong>
+        <strong
+          >{{ attentionContracts.length }} contract{{
+            attentionContracts.length === 1 ? "" : "s"
+          }}</strong
+        >
       </div>
       <div class="attention-items">
         <button
@@ -169,7 +173,9 @@
           type="button"
           @click="selectContract(contract)"
         >
-          <span>{{ contract.fileName || contract.documentType || "Contract" }}</span>
+          <span>{{
+            contract.fileName || contract.documentType || "Contract"
+          }}</span>
           <small>{{ lifecycleLabel(contract) }}</small>
         </button>
       </div>
@@ -191,7 +197,12 @@
               contracts.length
             }}</span>
           </span>
-          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <svg
+            class="chevron"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
             <path d="m6 9 6 6 6-6" />
           </svg>
         </button>
@@ -209,7 +220,10 @@
                 v-for="contract in contracts"
                 :key="contract.correlationId"
                 class="contract-item"
-                :class="{ 'contract-item--review': auth.hasRole('admin') && isPendingReview(contract) }"
+                :class="{
+                  'contract-item--review':
+                    auth.hasRole('admin') && isPendingReview(contract),
+                }"
               >
                 <div
                   class="contract-row"
@@ -217,7 +231,8 @@
                     'contract-row--clickable': isClickable(contract),
                     'contract-row--selected':
                       selectedId === contract.correlationId,
-                    'contract-row--processing': contract.status === 'processing',
+                    'contract-row--processing':
+                      contract.status === 'processing',
                   }"
                   @click="onCardClick(contract)"
                 >
@@ -249,21 +264,32 @@
                       {{ contract.fileName || "Contract" }}
                     </div>
                     <div class="contract-row-meta">
-                      <template v-if="contract.status === 'processing'"
-                        >{{ contract.statusMessage || "Extracting fields..." }}</template
-                      >
-                      <template v-else-if="contract.status === 'failed'"
-                        >{{ contract.lastError || contract.statusMessage || "Extraction failed" }}</template
-                      >
+                      <template v-if="contract.status === 'processing'">{{
+                        contract.statusMessage || "Extracting fields..."
+                      }}</template>
+                      <template v-else-if="contract.status === 'failed'">{{
+                        contract.lastError ||
+                        contract.statusMessage ||
+                        "Extraction failed"
+                      }}</template>
                       <template v-else>
                         {{ contract.documentType || "Document" }} ·
-                        {{ lifecycleLabel(contract) || formatDate(contract.uploadedAt) }}
+                        {{
+                          lifecycleLabel(contract) ||
+                          formatDate(contract.uploadedAt)
+                        }}
                       </template>
                     </div>
-                    <div v-if="paymentLabel(contract)" class="contract-row-payment">
+                    <div
+                      v-if="paymentLabel(contract)"
+                      class="contract-row-payment"
+                    >
                       {{ paymentLabel(contract) }}
                     </div>
-                    <div v-if="relationshipLabel(contract)" class="contract-row-relation">
+                    <div
+                      v-if="relationshipLabel(contract)"
+                      class="contract-row-relation"
+                    >
                       {{ relationshipLabel(contract) }}
                     </div>
                   </div>
@@ -308,18 +334,27 @@
                     v-if="relationshipCandidates(contract).length"
                     class="candidate-list"
                   >
-                    <div class="candidate-kicker">Possible related contract</div>
+                    <div class="candidate-kicker">
+                      Possible related contract
+                    </div>
                     <button
                       v-for="candidate in relationshipCandidates(contract)"
                       :key="candidate.correlationId"
                       type="button"
                       :class="[
                         'candidate',
-                        selectedRelatedId(contract) === candidate.correlationId && 'candidate--selected',
+                        selectedRelatedId(contract) ===
+                          candidate.correlationId && 'candidate--selected',
                       ]"
-                      @click.stop="setSelectedRelatedId(contract, candidate.correlationId)"
+                      @click.stop="
+                        setSelectedRelatedId(contract, candidate.correlationId)
+                      "
                     >
-                      <span>{{ candidate.fileName || candidate.documentType || "Related contract" }}</span>
+                      <span>{{
+                        candidate.fileName ||
+                        candidate.documentType ||
+                        "Related contract"
+                      }}</span>
                       <small>{{ candidateLabel(candidate) }}</small>
                     </button>
                   </div>
@@ -355,7 +390,9 @@
                       class="btn-ghost-sm btn-ghost-sm--danger"
                       type="button"
                       :disabled="reviewPending === contract.correlationId"
-                      @click.stop="reviewContract(contract, 'mark_duplicate_delete')"
+                      @click.stop="
+                        reviewContract(contract, 'mark_duplicate_delete')
+                      "
                     >
                       Duplicate, delete
                     </button>
@@ -368,9 +405,13 @@
                       Reject, delete
                     </button>
                   </div>
-                  <p v-if="relationshipCandidates(contract).length" class="review-action-hint">
-                    Use replacement only when this upload should supersede the selected contract.
-                    Use extension when it is a related new period. Duplicate and reject hide this upload.
+                  <p
+                    v-if="relationshipCandidates(contract).length"
+                    class="review-action-hint"
+                  >
+                    Use replacement only when this upload should supersede the
+                    selected contract. Use extension when it is a related new
+                    period. Duplicate and reject hide this upload.
                   </p>
                 </section>
               </div>
@@ -396,7 +437,12 @@
             </svg>
             Upload New
           </span>
-          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <svg
+            class="chevron"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
             <path d="m6 9 6 6 6-6" />
           </svg>
         </button>
@@ -426,7 +472,11 @@
             </div>
             <div v-if="uploadState === 'error'" class="upload-err">
               <span>{{ uploadError }}</span>
-              <button class="btn-ghost-sm" type="button" @click="uploadState = 'idle'">
+              <button
+                class="btn-ghost-sm"
+                type="button"
+                @click="uploadState = 'idle'"
+              >
                 Try again
               </button>
             </div>
@@ -504,12 +554,17 @@ const attentionContracts = computed(() => {
     .filter((contract) => {
       if (isPendingReview(contract)) return true;
       const actionDate = lifecycleDate(contract);
-      return actionDate && actionDate >= startOfDay(now) && actionDate <= horizon;
+      return (
+        actionDate && actionDate >= startOfDay(now) && actionDate <= horizon
+      );
     })
     .sort((a, b) => {
-      if (isPendingReview(a) !== isPendingReview(b)) return isPendingReview(a) ? -1 : 1;
-      return (lifecycleDate(a)?.getTime() ?? Number.MAX_SAFE_INTEGER) -
-        (lifecycleDate(b)?.getTime() ?? Number.MAX_SAFE_INTEGER);
+      if (isPendingReview(a) !== isPendingReview(b))
+        return isPendingReview(a) ? -1 : 1;
+      return (
+        (lifecycleDate(a)?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (lifecycleDate(b)?.getTime() ?? Number.MAX_SAFE_INTEGER)
+      );
     });
 });
 
@@ -675,7 +730,7 @@ async function sendMessage() {
         message: msg,
       }),
     });
-    if (!res.ok) throw new Error(`Chat failed (${res.status})`);
+    if (!res.ok) throw res;
     const data = await res.json();
     chatMessages.value.push({
       id: crypto.randomUUID(),
@@ -684,11 +739,22 @@ async function sendMessage() {
       model: data.modelUsed,
       references: data.references ?? [],
     });
-  } catch {
+  } catch (err) {
+    const status = err?.status ?? 0;
+    const content =
+      status === 401
+        ? "Your session has expired. Please refresh the page and sign in again."
+        : status === 403
+          ? "Access denied. Please sign in with an account that has access."
+          : status === 503
+            ? "The contract service is temporarily unavailable. Please try again shortly."
+            : status >= 400
+              ? `Request failed (${status}). Please try again.`
+              : "Could not reach the server. Check your connection and try again.";
     chatMessages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "Something went wrong. Please try again.",
+      content,
       error: true,
     });
   } finally {
@@ -972,7 +1038,9 @@ function reviewSummary(contract) {
 function candidateLabel(candidate) {
   const reasons = Array.isArray(candidate.reasons) ? candidate.reasons : [];
   const relationship = relationshipDisplay(candidate.relationshipType);
-  return [relationship, reasons.slice(0, 2).join(" ")].filter(Boolean).join(" · ");
+  return [relationship, reasons.slice(0, 2).join(" ")]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function relationshipLabel(contract) {
@@ -1011,9 +1079,11 @@ function lifecycleDate(contract) {
 
 function lifecycleLabel(contract) {
   if (isPendingReview(contract)) return "Pending review";
-  if (contract.noticeDeadline) return `Notice by ${formatDate(contract.noticeDeadline)}`;
+  if (contract.noticeDeadline)
+    return `Notice by ${formatDate(contract.noticeDeadline)}`;
   if (contract.expiryDate) return `Expires ${formatDate(contract.expiryDate)}`;
-  if (contract.assignmentEndDate) return `Assignment ends ${formatDate(contract.assignmentEndDate)}`;
+  if (contract.assignmentEndDate)
+    return `Assignment ends ${formatDate(contract.assignmentEndDate)}`;
   return "";
 }
 
@@ -1023,9 +1093,10 @@ function paymentLabel(contract) {
     maximumFractionDigits: 2,
   }).format(contract.paymentAmount);
   const currency = contract.paymentCurrency || "";
-  const unit = contract.paymentUnit && contract.paymentUnit !== "one_time"
-    ? `/${contract.paymentUnit}`
-    : "";
+  const unit =
+    contract.paymentUnit && contract.paymentUnit !== "one_time"
+      ? `/${contract.paymentUnit}`
+      : "";
   return `${amount} ${currency}${unit}`.trim();
 }
 
