@@ -30,6 +30,7 @@ public class ContractChatAgent
 
         Use find_expiring_contracts for expiry questions.
         Use find_renewal_windows for notice period, renewal, and action deadline questions.
+        Use find_upcoming_contract_starts for questions about when contracts begin or which contract starts next.
         Use find_contracts_by_person when the question names an employee, consultant, contact, or signatory.
         Use find_contracts_by_counterparty when the question names a customer, supplier, vendor, or other party.
         Use list_contracts to inspect the visible contract portfolio.
@@ -56,6 +57,10 @@ public class ContractChatAgent
         ChatTool.CreateFunctionTool(
             "find_renewal_windows",
             "Find contracts with notice deadlines, renewal windows, or expiry action dates in a date range.",
+            BinaryData.FromString("""{"type":"object","properties":{"from":{"type":"string","description":"Optional start date, ISO yyyy-MM-dd"},"to":{"type":"string","description":"Optional end date, ISO yyyy-MM-dd"}},"required":[]}""")),
+        ChatTool.CreateFunctionTool(
+            "find_upcoming_contract_starts",
+            "Find contracts whose assignment or effective start date falls in a date range. Defaults to the next 180 days when dates are omitted.",
             BinaryData.FromString("""{"type":"object","properties":{"from":{"type":"string","description":"Optional start date, ISO yyyy-MM-dd"},"to":{"type":"string","description":"Optional end date, ISO yyyy-MM-dd"}},"required":[]}""")),
         ChatTool.CreateFunctionTool(
             "find_contracts_by_person",
@@ -315,6 +320,7 @@ public class ContractChatAgent
             "list_contracts"        => await ListContractsToolAsync(userId, isAdmin, references, ct),
             "find_expiring_contracts" => await FindExpiringContractsToolAsync(call, userId, isAdmin, references, ct),
             "find_renewal_windows"  => await FindRenewalWindowsToolAsync(call, userId, isAdmin, references, ct),
+            "find_upcoming_contract_starts" => await FindUpcomingStartsToolAsync(call, userId, isAdmin, references, ct),
             "find_contracts_by_person" => await FindContractsByPersonToolAsync(call, userId, isAdmin, references, ct),
             "find_contracts_by_counterparty" => await FindContractsByCounterpartyToolAsync(call, userId, isAdmin, references, ct),
             "find_contract_for_period" => await FindContractForPeriodToolAsync(call, userId, isAdmin, ct),
@@ -360,6 +366,21 @@ public class ContractChatAgent
         var from = ParseDateArg(call.FunctionArguments, "from");
         var to = ParseDateArg(call.FunctionArguments, "to");
         var contracts = await _contractIntelligence.FindRenewalWindowsAsync(
+            Caller(userId, isAdmin), from, to, ct);
+        AddReferences(references, contracts);
+        return JsonSerializer.Serialize(contracts);
+    }
+
+    private async Task<string> FindUpcomingStartsToolAsync(
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        Dictionary<string, ContractReference> references,
+        CancellationToken ct)
+    {
+        var from = ParseDateArg(call.FunctionArguments, "from");
+        var to = ParseDateArg(call.FunctionArguments, "to");
+        var contracts = await _contractIntelligence.FindUpcomingStartsAsync(
             Caller(userId, isAdmin), from, to, ct);
         AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);

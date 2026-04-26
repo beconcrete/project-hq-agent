@@ -15,10 +15,6 @@ public class SalesForecastChatAgent
     private const string MiniModel = "gpt-4.1-mini";
     private const int MaxHistoryTurns = 20;
 
-    private const string SystemPrompt = """
-        You are a sales forecast assistant for a consulting firm. You help management understand monthly revenue estimates, booked vs. unbooked consultants, and pipeline gaps. You can look up forecasts by month or by individual consultant. Always answer in Swedish kronor (SEK). If asked about something unrelated to sales forecasting or consultant revenue, politely decline and redirect.
-        """;
-
     private static readonly IReadOnlyList<ChatTool> Tools =
     [
         ChatTool.CreateFunctionTool(
@@ -54,7 +50,7 @@ public class SalesForecastChatAgent
     public async Task<string> ChatAsync(string sessionId, string message, CancellationToken ct)
     {
         var history = await LoadHistoryAsync(sessionId, ct);
-        var messages = new List<ChatMessage> { ChatMessage.CreateSystemMessage(SystemPrompt) };
+        var messages = new List<ChatMessage> { ChatMessage.CreateSystemMessage(BuildSystemPrompt()) };
 
         foreach (var turn in history)
         {
@@ -186,5 +182,24 @@ public class SalesForecastChatAgent
             Role = role,
             Content = content,
         }, TableUpdateMode.Replace, ct);
+    }
+
+    private static string BuildSystemPrompt()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return $$"""
+            You are a sales forecast assistant for a consulting firm. You help management understand monthly revenue estimates, booked vs. unbooked consultants, and pipeline gaps.
+
+            Today's date is {{today:yyyy-MM-dd}}.
+
+            IMPORTANT RULES:
+            - For any question about a forecast month, consultant forecast, booked revenue, unbooked revenue, or who is booked, always call a forecast tool before answering.
+            - Never answer forecast questions from memory or assumptions.
+            - Resolve relative dates from today's date. For example, "this month" means {{today:yyyy-MM}}, and "next month" means the month immediately after that.
+            - Answer in the same language as the user's latest message unless they explicitly ask you to switch.
+            - Always answer monetary amounts in Swedish kronor (SEK).
+            - If the tools return an error or missing data, say that clearly instead of inventing an answer.
+            - If asked about something unrelated to sales forecasting or consultant revenue, politely decline and redirect.
+            """;
     }
 }

@@ -94,6 +94,24 @@ public class ContractIntelligence : IContractIntelligence
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<ContractSummary>> FindUpcomingStartsAsync(
+        ContractCallerContext caller,
+        DateOnly? from,
+        DateOnly? to,
+        CancellationToken ct)
+    {
+        var fromDate = ToDateTime(from) ?? DateTime.UtcNow.Date;
+        var toDate = ToDateTime(to) ?? fromDate.AddDays(180);
+
+        var entities = await LoadVisibleEntitiesAsync(caller, ct);
+        return entities
+            .Where(e => (e.AssignmentStartDate ?? e.EffectiveDate)?.Date is DateTime startDate &&
+                startDate >= fromDate && startDate <= toDate)
+            .OrderBy(e => e.AssignmentStartDate ?? e.EffectiveDate)
+            .Select(ToSummary)
+            .ToArray();
+    }
+
     public async Task<IReadOnlyList<ContractSummary>> FindByPersonAsync(
         ContractCallerContext caller,
         string personName,
@@ -180,6 +198,13 @@ public class ContractIntelligence : IContractIntelligence
         {
             matches = await FindExpiringAsync(question.Caller, null, null, null, ct);
             return new ContractAnswer("Contracts expiring in the next 90 days.", matches);
+        }
+
+        if (text.Contains("start", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("begin", StringComparison.OrdinalIgnoreCase))
+        {
+            matches = await FindUpcomingStartsAsync(question.Caller, null, null, ct);
+            return new ContractAnswer("Contracts starting in the next 180 days.", matches);
         }
 
         matches = await ListContractsAsync(question.Caller, ct);

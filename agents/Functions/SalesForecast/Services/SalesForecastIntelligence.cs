@@ -26,11 +26,20 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
         ValidatePeriod(year, month);
 
         var employees = await _hr.ListEmployeesAsync(ct);
+        var hrConfig = await _hr.GetHRConfigAsync(ct);
+        var utilizationTarget = SalesForecastRules.NormalizeUtilizationTarget(hrConfig.UtilizationTarget);
+        var seniorityRates = await LoadSeniorityRatesAsync(ct);
         var consultants = new List<ForecastResult>(employees.Count);
 
         foreach (var employee in employees)
         {
-            var result = await BuildForecastAsync(employee, year, month, ct);
+            var result = await BuildForecastAsync(
+                employee,
+                year,
+                month,
+                utilizationTarget,
+                seniorityRates,
+                ct);
             consultants.Add(result);
         }
 
@@ -61,6 +70,9 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
             return null;
 
         var employees = await _hr.ListEmployeesAsync(ct);
+        var hrConfig = await _hr.GetHRConfigAsync(ct);
+        var utilizationTarget = SalesForecastRules.NormalizeUtilizationTarget(hrConfig.UtilizationTarget);
+        var seniorityRates = await LoadSeniorityRatesAsync(ct);
         var employee = employees.FirstOrDefault(e =>
             string.Equals(e.FullName, consultantName, StringComparison.OrdinalIgnoreCase))
             ?? employees.FirstOrDefault(e =>
@@ -68,19 +80,29 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
 
         return employee is null
             ? null
-            : await BuildForecastAsync(employee, year, month, ct);
+            : await BuildForecastAsync(
+                employee,
+                year,
+                month,
+                utilizationTarget,
+                seniorityRates,
+                ct);
     }
 
     private async Task<ForecastResult> BuildForecastAsync(
         EmployeeSummary employee,
         int year,
         int month,
+        decimal baseUtilizationTarget,
+        IReadOnlyDictionary<string, SeniorityRateEntity> seniorityRates,
         CancellationToken ct)
     {
         var workingHours = await _forecastTables.GetWorkingHoursAsync(month, ct)
             ?? throw new InvalidOperationException($"Working hours are not seeded for {year}-{month:D2}.");
 
-        var seniorityLevel = ResolveSeniorityLevel(employee);
+        var periodStart = new DateOnly(year, month, 1);
+        var periodEnd = LastDayOfMonth(year, month);
+        var contractHistory = await LoadForecastContractsAsync(employee, ct);
         var contract = await _contracts.FindContractForPeriodAsync(
             employee.FullName,
             year,
@@ -90,16 +112,23 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
 
         if (contract is not null)
         {
-            var billableHours = contract.StartDate > new DateOnly(year, month, 1)
-                ? CountWeekdays(contract.StartDate, LastDayOfMonth(year, month)) * 8d
-                : workingHours.AvailableHours;
+            var overlapStart = contract.StartDate > periodStart ? contract.StartDate : periodStart;
+            var overlapEnd = contract.EndDate < periodEnd ? contract.EndDate : periodEnd;
+            var availableContractHours = CountWeekdays(overlapStart, overlapEnd) * 8d;
+            var billableHours = availableContractHours *
+                (double)SalesForecastRules.BookedUtilization(baseUtilizationTarget);
             var hourlyRate = contract.HourlyRateSEK ?? employee.BillingBaseRate;
+            var bookedSeniorityLevel = ResolveSeniorityLevel(
+                employee,
+                seniorityRates,
+                contractHistory,
+                hourlyRate);
 
             return new ForecastResult
             {
                 ConsultantId = employee.EmployeeId,
                 Name = employee.FullName,
-                SeniorityLevel = seniorityLevel,
+                SeniorityLevel = bookedSeniorityLevel,
                 Status = ForecastStatus.Booked,
                 BillableHours = billableHours,
                 HourlyRate = hourlyRate,
@@ -107,9 +136,21 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
             };
         }
 
-        var rate = await _forecastTables.GetSeniorityRateAsync(seniorityLevel, ct)
-            ?? throw new InvalidOperationException($"Seniority rate is not seeded for '{seniorityLevel}'.");
-        var unbookedHours = workingHours.AvailableHours * rate.Utilization;
+        var seniorityLevel = ResolveSeniorityLevel(
+            employee,
+            seniorityRates,
+            contractHistory,
+            null);
+        var rate = seniorityRates.TryGetValue(seniorityLevel, out var resolvedRate)
+            ? resolvedRate
+            : throw new InvalidOperationException($"Seniority rate is not seeded for '{seniorityLevel}'.");
+        var utilization = ResolveUnbookedUtilization(
+            employee,
+            periodStart,
+            periodEnd,
+            contractHistory,
+            baseUtilizationTarget);
+        var unbookedHours = workingHours.AvailableHours * (double)utilization;
 
         return new ForecastResult
         {
@@ -123,16 +164,90 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
         };
     }
 
-    private static string ResolveSeniorityLevel(EmployeeSummary employee)
+    private static decimal ResolveUnbookedUtilization(
+        EmployeeSummary employee,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        IReadOnlyList<ContractSummary> contractHistory,
+        decimal baseUtilizationTarget)
+    {
+        var onboardingUtilization = ResolveOnboardingUtilization(
+            employee,
+            periodStart,
+            periodEnd,
+            baseUtilizationTarget);
+        if (onboardingUtilization.HasValue)
+            return onboardingUtilization.Value;
+
+        var lastContractEnd = contractHistory
+            .Select(ContractEndDate)
+            .Where(date => date.HasValue && date.Value < periodStart)
+            .Select(date => date!.Value)
+            .DefaultIfEmpty()
+            .Max();
+
+        if (lastContractEnd != default &&
+            lastContractEnd.AddMonths(1).Year == periodStart.Year &&
+            lastContractEnd.AddMonths(1).Month == periodStart.Month)
+            return SalesForecastRules.FirstMonthAfterContractEndUtilization(baseUtilizationTarget);
+
+        return baseUtilizationTarget;
+    }
+
+    private static decimal? ResolveOnboardingUtilization(
+        EmployeeSummary employee,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        decimal baseUtilizationTarget)
+    {
+        var startDate = DateOnly.FromDateTime(employee.StartDate.UtcDateTime.Date);
+        var onboardingEnd = startDate.AddDays(SalesForecastRules.OnboardingDays - 1);
+
+        if (periodStart > onboardingEnd)
+            return null;
+
+        if (periodEnd <= onboardingEnd)
+            return 0m;
+
+        var totalWeekdays = CountWeekdays(periodStart, periodEnd);
+        if (totalWeekdays == 0)
+            return 0m;
+
+        var firstBillableDay = onboardingEnd.AddDays(1);
+        var billableWeekdays = CountWeekdays(
+            firstBillableDay > periodStart ? firstBillableDay : periodStart,
+            periodEnd);
+        var monthlyAvailableHours = totalWeekdays * 8m;
+        var billableHours = billableWeekdays * 8m * baseUtilizationTarget;
+        return monthlyAvailableHours == 0m
+            ? 0m
+            : SalesForecastRules.ClampUtilization(billableHours / monthlyAvailableHours);
+    }
+
+    private static string ResolveSeniorityLevel(
+        EmployeeSummary employee,
+        IReadOnlyDictionary<string, SeniorityRateEntity> seniorityRates,
+        IReadOnlyList<ContractSummary> contractHistory,
+        decimal? activeContractRate)
     {
         if (!string.IsNullOrWhiteSpace(employee.SeniorityLevel))
             return NormalizeSeniority(employee.SeniorityLevel);
 
-        if (employee.BillingBaseRate >= 1300m)
-            return "Senior";
-        if (employee.BillingBaseRate >= 1000m)
-            return "Medior";
-        return "Junior";
+        var referenceRate = activeContractRate
+            ?? contractHistory
+                .Select(ContractHourlyRate)
+                .Where(rate => rate.HasValue)
+                .Select(rate => rate!.Value)
+                .OrderByDescending(rate => rate)
+                .FirstOrDefault();
+
+        if (referenceRate > 0m)
+            return ClosestSeniorityForRate(referenceRate, seniorityRates);
+
+        if (employee.BillingBaseRate > 0m)
+            return ClosestSeniorityForRate(employee.BillingBaseRate, seniorityRates);
+
+        return "Medior";
     }
 
     private static string NormalizeSeniority(string seniorityLevel)
@@ -171,5 +286,80 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
         }
 
         return count;
+    }
+
+    private async Task<IReadOnlyDictionary<string, SeniorityRateEntity>> LoadSeniorityRatesAsync(CancellationToken ct)
+    {
+        var roles = new[] { "Senior", "Medior", "Junior" };
+        var rates = new Dictionary<string, SeniorityRateEntity>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var role in roles)
+        {
+            rates[role] = await _forecastTables.GetSeniorityRateAsync(role, ct)
+                ?? throw new InvalidOperationException($"Seniority rate is not seeded for '{role}'.");
+        }
+
+        return rates;
+    }
+
+    private async Task<IReadOnlyList<ContractSummary>> LoadForecastContractsAsync(
+        EmployeeSummary employee,
+        CancellationToken ct)
+    {
+        var contracts = await _contracts.FindByPersonAsync(
+            new ContractCallerContext("sales-forecast", true),
+            employee.FullName,
+            ct);
+
+        return contracts
+            .Where(IsForecastRelevantContract)
+            .ToArray();
+    }
+
+    private static bool IsForecastRelevantContract(ContractSummary contract)
+    {
+        if (string.Equals(contract.ReviewState, "pending_review", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return ContractStartDate(contract).HasValue &&
+            ContractEndDate(contract).HasValue &&
+            ContractHourlyRate(contract).HasValue;
+    }
+
+    private static DateOnly? ContractStartDate(ContractSummary contract) =>
+        contract.AssignmentStartDate is DateTime assignmentStart
+            ? DateOnly.FromDateTime(assignmentStart)
+            : contract.EffectiveDate is DateTime effectiveDate
+                ? DateOnly.FromDateTime(effectiveDate)
+                : null;
+
+    private static DateOnly? ContractEndDate(ContractSummary contract) =>
+        contract.AssignmentEndDate is DateTime assignmentEnd
+            ? DateOnly.FromDateTime(assignmentEnd)
+            : contract.ExpiryDate is DateTime expiryDate
+                ? DateOnly.FromDateTime(expiryDate)
+                : null;
+
+    private static decimal? ContractHourlyRate(ContractSummary contract) =>
+        contract.PaymentAmount.HasValue &&
+        string.Equals(contract.PaymentCurrency, "SEK", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(contract.PaymentUnit, "hour", StringComparison.OrdinalIgnoreCase)
+            ? (decimal)contract.PaymentAmount.Value
+            : null;
+
+    private static string ClosestSeniorityForRate(
+        decimal referenceRate,
+        IReadOnlyDictionary<string, SeniorityRateEntity> seniorityRates)
+    {
+        return seniorityRates
+            .Select(kvp => new
+            {
+                Role = kvp.Key,
+                Distance = Math.Abs(kvp.Value.HourlyRateSEK - referenceRate),
+            })
+            .OrderBy(x => x.Distance)
+            .ThenBy(x => x.Role)
+            .First()
+            .Role;
     }
 }
