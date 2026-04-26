@@ -46,6 +46,18 @@
           <span class="chat-context-label">selected</span>
         </div>
         <button
+          class="chat-context-open"
+          type="button"
+          @click="openContractDocument(selectedContract)"
+          aria-label="Open selected contract"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M14 3h7v7" />
+            <path d="M10 14 21 3" />
+            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+          </svg>
+        </button>
+        <button
           class="chat-context-dismiss"
           type="button"
           @click="selectedId = null"
@@ -294,6 +306,20 @@
                     </div>
                   </div>
                   <div class="contract-row-end">
+                    <button
+                      v-if="isClickable(contract)"
+                      class="row-action-btn"
+                      type="button"
+                      @click.stop="openContractDocument(contract)"
+                      aria-label="Open contract"
+                      title="Open contract"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M14 3h7v7" />
+                        <path d="M10 14 21 3" />
+                        <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                      </svg>
+                    </button>
                     <span
                       v-if="contract.status === 'processing'"
                       class="badge badge--blue"
@@ -815,23 +841,9 @@ function clearChat() {
 async function openContractReference(ref) {
   const correlationId = referenceCorrelationId(ref);
   if (!correlationId) return;
-  const tab = window.open("", "_blank");
   try {
-    const res = await fetch(
-      `/api/get-contract-download-url?correlationId=${encodeURIComponent(
-        correlationId,
-      )}`,
-      {
-        headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
-      },
-    );
-    if (!res.ok) throw new Error(`Download URL failed (${res.status})`);
-    const data = await res.json();
-    if (!data.url) throw new Error("Missing download URL");
-    if (tab) tab.location.href = data.url;
-    else window.location.href = data.url;
+    await openContractById(correlationId);
   } catch {
-    if (tab) tab.close();
     chatMessages.value.push({
       id: crypto.randomUUID(),
       role: "assistant",
@@ -853,6 +865,34 @@ function referenceLabel(ref) {
     ref?.DocumentType ??
     "Contract"
   );
+}
+
+async function openContractDocument(contract) {
+  const correlationId = contract?.correlationId;
+  if (!correlationId) return;
+  await openContractById(correlationId);
+}
+
+async function openContractById(correlationId) {
+  const tab = window.open("", "_blank");
+  try {
+    const res = await fetch(
+      `/api/get-contract-download-url?correlationId=${encodeURIComponent(
+        correlationId,
+      )}`,
+      {
+        headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` },
+      },
+    );
+    if (!res.ok) throw new Error(`Download URL failed (${res.status})`);
+    const data = await res.json();
+    if (!data.url) throw new Error("Missing download URL");
+    if (tab) tab.location.href = data.url;
+    else window.location.href = data.url;
+  } catch (error) {
+    if (tab) tab.close();
+    throw error;
+  }
 }
 
 function scrollChatToBottom() {
@@ -1047,9 +1087,16 @@ function relationshipLabel(contract) {
   if (isPendingReview(contract) && relationshipCandidates(contract).length)
     return "Potential match found";
 
-  const type = relationshipDisplay(contract.relationshipType);
-  if (!type || contract.relationshipType === "new") return "";
-  return type;
+  switch (contract.relationshipType) {
+    case "replacement":
+      return "Supersedes earlier contract";
+    case "extension":
+      return "Extends earlier contract";
+    case "duplicate":
+      return "Marked duplicate";
+    default:
+      return "";
+  }
 }
 
 function relationshipDisplay(type) {
@@ -1249,6 +1296,36 @@ svg {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+}
+
+.chat-context-open,
+.row-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chat-context-open {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.row-action-btn {
+  width: 1.9rem;
+  height: 1.9rem;
+  flex-shrink: 0;
+}
+
+.chat-context-open:hover,
+.row-action-btn:hover {
+  color: var(--accent);
+  border-color: #b7d2cc;
+  background: #f6fbf9;
 }
 
 .conversation {

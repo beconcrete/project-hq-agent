@@ -107,15 +107,6 @@ public class ContractChatAgent
         bool isAdmin,
         CancellationToken ct)
     {
-        if (!await IsInContractScopeAsync(message, contextCorrelationId is not null, ct))
-        {
-            _logger.LogInformation("Rejected out-of-domain contract chat message for session {SessionId}", sessionId);
-            return new ChatResult(
-                "I can only help with questions about your contracts and contract data.",
-                MiniModel,
-                []);
-        }
-
         var history = await LoadHistoryAsync(sessionId, ct);
 
         var systemPrompt = contextCorrelationId is not null

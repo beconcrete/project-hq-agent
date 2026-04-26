@@ -380,12 +380,25 @@ public class TableStorageService
         if (score < 6)
             return null;
 
+        var extendsExistingPeriod =
+            samePeople &&
+            currentEnd.HasValue &&
+            existingEnd.HasValue &&
+            currentEnd.Value.Date > existingEnd.Value.Date &&
+            currentStart.HasValue &&
+            existingStart.HasValue &&
+            currentStart.Value.Date <= existingEnd.Value.Date;
+
+        var isExplicitExtensionLikeDocument =
+            ContainsAny(current.DocumentType, "extension", "amendment") ||
+            ContainsAny(existing.DocumentType, "extension", "amendment");
+
         var relationshipType = sameFamily && sameDates && (samePeople || !HasPeople(current, existing))
             ? "duplicate"
-            : sameFamily && samePeople && overlappingDates
-                ? "replacement"
-                : sameFamily && samePeople && laterNonOverlapping
-                    ? "extension"
+            : sameFamily && samePeople && (laterNonOverlapping || extendsExistingPeriod || isExplicitExtensionLikeDocument)
+                ? "extension"
+                : sameFamily && samePeople && overlappingDates
+                    ? "replacement"
                     : "unknown";
 
         if (relationshipType == "unknown")
@@ -486,6 +499,9 @@ public class TableStorageService
 
     private static string Normalize(string value) =>
         string.Join(" ", value.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static bool ContainsAny(string value, params string[] terms) =>
+        terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
 }
 
 public record ContractRelationshipCandidate(
