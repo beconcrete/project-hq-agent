@@ -43,16 +43,37 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
             consultants.Add(result);
         }
 
+        var bookedRevenue = consultants
+            .Where(c => c.Status == ForecastStatus.Booked)
+            .Sum(c => c.EstimatedRevenueSEK);
+        var unbookedRevenue = consultants
+            .Where(c => c.Status == ForecastStatus.Unbooked)
+            .Sum(c => c.EstimatedRevenueSEK);
+        var bookedHours = consultants
+            .Where(c => c.Status == ForecastStatus.Booked)
+            .Sum(c => c.BillableHours);
+        var unbookedHours = consultants
+            .Where(c => c.Status == ForecastStatus.Unbooked)
+            .Sum(c => c.BillableHours);
+        var plannedRevenue = bookedRevenue + unbookedRevenue;
+        var plannedHours = bookedHours + unbookedHours;
+
         return new MonthlyForecastSummary
         {
             Year = year,
             Month = month,
-            TotalBookedRevenue = consultants
-                .Where(c => c.Status == ForecastStatus.Booked)
-                .Sum(c => c.EstimatedRevenueSEK),
-            TotalUnbookedEstimate = consultants
-                .Where(c => c.Status == ForecastStatus.Unbooked)
-                .Sum(c => c.EstimatedRevenueSEK),
+            TotalBookedRevenue = bookedRevenue,
+            TotalUnbookedEstimate = unbookedRevenue,
+            TotalPlannedRevenue = plannedRevenue,
+            TotalBookedHours = bookedHours,
+            TotalUnbookedHours = unbookedHours,
+            TotalPlannedHours = plannedHours,
+            AverageBookedHourlyRate = bookedHours > 0d
+                ? Decimal.Round(bookedRevenue / (decimal)bookedHours, 2)
+                : 0m,
+            AveragePlannedHourlyRate = plannedHours > 0d
+                ? Decimal.Round(plannedRevenue / (decimal)plannedHours, 2)
+                : 0m,
             BookedHeadcount = consultants.Count(c => c.Status == ForecastStatus.Booked),
             UnbookedHeadcount = consultants.Count(c => c.Status == ForecastStatus.Unbooked),
             Consultants = consultants.OrderBy(c => c.Name).ToList(),
@@ -141,6 +162,7 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
                 Name = employee.FullName,
                 SeniorityLevel = bookedSeniorityLevel,
                 ForecastBasis = "booked-contract",
+                HourlyRateBasis = "contract",
                 Status = ForecastStatus.Booked,
                 BillableHours = billableHours,
                 AvailableHoursInMonth = workingHours.AvailableHours,
@@ -187,6 +209,7 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
             Name = employee.FullName,
             SeniorityLevel = seniorityLevel,
             ForecastBasis = utilizationContext.Basis,
+            HourlyRateBasis = "seniority-benchmark",
             Status = ForecastStatus.Unbooked,
             BillableHours = unbookedHours,
             AvailableHoursInMonth = workingHours.AvailableHours,

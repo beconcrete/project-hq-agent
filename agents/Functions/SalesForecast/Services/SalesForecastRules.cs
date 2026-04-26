@@ -6,8 +6,10 @@ public static class SalesForecastRules
     // rules that management may want to inspect or change later, so they should
     // not be scattered across multiple methods.
 
-    // Active client work usually means stronger than baseline utilization.
-    public const decimal BookedUtilizationAdjustment = 0.10m;
+    // Confirmed client work is treated as fully sellable capacity for the
+    // month. If a consultant is sold for the month, forecast 100% of the
+    // available contract-overlap hours as billable.
+    public const decimal BookedUtilizationValue = 1.00m;
 
     // The first full month after contract end is assumed to be softer while the
     // consultant transitions to a new assignment.
@@ -23,8 +25,8 @@ public static class SalesForecastRules
         return ClampUtilization(normalized);
     }
 
-    public static decimal BookedUtilization(decimal baseTarget) =>
-        ClampUtilization(baseTarget + BookedUtilizationAdjustment);
+    public static decimal BookedUtilization(decimal _) =>
+        BookedUtilizationValue;
 
     public static decimal FirstMonthAfterContractEndUtilization(decimal baseTarget) =>
         ClampUtilization(baseTarget + FirstMonthAfterContractEndAdjustment);

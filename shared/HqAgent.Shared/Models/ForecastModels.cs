@@ -12,6 +12,7 @@ public class ForecastResult
     public string Name { get; set; } = string.Empty;
     public string SeniorityLevel { get; set; } = string.Empty;
     public string ForecastBasis { get; set; } = string.Empty;
+    public string HourlyRateBasis { get; set; } = string.Empty;
     public ForecastStatus Status { get; set; }
     public double BillableHours { get; set; }
     public double AvailableHoursInMonth { get; set; }
@@ -32,6 +33,12 @@ public class MonthlyForecastSummary
     public int Month { get; set; }
     public decimal TotalBookedRevenue { get; set; }
     public decimal TotalUnbookedEstimate { get; set; }
+    public decimal TotalPlannedRevenue { get; set; }
+    public double TotalBookedHours { get; set; }
+    public double TotalUnbookedHours { get; set; }
+    public double TotalPlannedHours { get; set; }
+    public decimal AverageBookedHourlyRate { get; set; }
+    public decimal AveragePlannedHourlyRate { get; set; }
     public int BookedHeadcount { get; set; }
     public int UnbookedHeadcount { get; set; }
     public List<ForecastResult> Consultants { get; set; } = [];
