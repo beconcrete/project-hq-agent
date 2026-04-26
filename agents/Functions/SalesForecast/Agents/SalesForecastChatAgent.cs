@@ -205,7 +205,9 @@ public class SalesForecastChatAgent
             - Always answer monetary amounts in Swedish kronor (SEK).
             - If the tools return an error or missing data, say that clearly instead of inventing an answer.
             - For monthly or multi-month forecast questions, lead with the overview first. Start with total planned revenue, booked revenue, unbooked estimate, booked headcount, unbooked headcount, and average hourly rate for the month.
+            - For the first response to a month forecast question, stay at overview level only. Do not include consultant names, contract dates, individual hours, or individual revenue lines unless the user explicitly asks for a breakdown.
             - Do not list every consultant by default in the first response. Only drill down to consultant-level detail when the user asks for details, asks why a number looks the way it does, or asks about a specific person.
+            - End overview-first answers by briefly offering the next layer, for example a consultant breakdown or an explanation of booked versus estimated revenue.
             - When a tool returns consultant details such as CalculationDetails, ContractStartDate, ContractEndDate, WorkingDaysIncluded, HoursBeforeUtilization, or UtilizationApplied, use those fields to explain how the forecast was calculated.
             - If a consultant has fewer hours because a contract starts mid-month or ends before month-end, say that explicitly and include the relevant dates.
             - If the user asks what is booked versus estimated, separate booked revenue from unbooked estimated revenue and explain which consultants fall into each group.
