@@ -304,22 +304,16 @@
                     >
                       {{ relationshipLabel(contract) }}
                     </div>
-                  </div>
-                  <div class="contract-row-end">
                     <button
                       v-if="isClickable(contract)"
-                      class="row-action-btn"
+                      class="contract-inline-link"
                       type="button"
                       @click.stop="openContractDocument(contract)"
-                      aria-label="Open contract"
-                      title="Open contract"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path d="M14 3h7v7" />
-                        <path d="M10 14 21 3" />
-                        <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
-                      </svg>
+                      Open contract
                     </button>
+                  </div>
+                  <div class="contract-row-end">
                     <span
                       v-if="contract.status === 'processing'"
                       class="badge badge--blue"
@@ -1807,6 +1801,25 @@ textarea::placeholder {
   color: #8a5f11;
   font-size: 0.72rem;
   font-weight: 700;
+}
+
+.contract-inline-link {
+  margin-top: 0.34rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.14rem;
+}
+
+.contract-inline-link:hover {
+  color: #0e544a;
 }
 
 .contract-row-end {
