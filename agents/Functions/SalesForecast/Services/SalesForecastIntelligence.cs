@@ -114,14 +114,25 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
         {
             var overlapStart = contract.StartDate > periodStart ? contract.StartDate : periodStart;
             var overlapEnd = contract.EndDate < periodEnd ? contract.EndDate : periodEnd;
-            var availableContractHours = CountWeekdays(overlapStart, overlapEnd) * 8d;
-            var billableHours = availableContractHours *
-                (double)SalesForecastRules.BookedUtilization(baseUtilizationTarget);
+            var includedWorkingDays = CountWeekdays(overlapStart, overlapEnd);
+            var availableContractHours = includedWorkingDays * 8d;
+            var utilizationApplied = SalesForecastRules.BookedUtilization(baseUtilizationTarget);
+            var billableHours = availableContractHours * (double)utilizationApplied;
             var hourlyRate = contract.HourlyRateSEK ?? employee.BillingBaseRate;
             var bookedSeniorityLevel = ResolveSeniorityLevel(
                 employee,
                 seniorityRates,
                 contractHistory,
+                hourlyRate);
+            var bookedCalculationDetails = BuildBookedCalculationDetails(
+                employee.FullName,
+                periodStart,
+                periodEnd,
+                overlapStart,
+                overlapEnd,
+                includedWorkingDays,
+                availableContractHours,
+                utilizationApplied,
                 hourlyRate);
 
             return new ForecastResult
@@ -129,10 +140,19 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
                 ConsultantId = employee.EmployeeId,
                 Name = employee.FullName,
                 SeniorityLevel = bookedSeniorityLevel,
+                ForecastBasis = "booked-contract",
                 Status = ForecastStatus.Booked,
                 BillableHours = billableHours,
+                AvailableHoursInMonth = workingHours.AvailableHours,
+                HoursBeforeUtilization = availableContractHours,
+                WorkingDaysInMonth = workingHours.AvailableDays,
+                WorkingDaysIncluded = includedWorkingDays,
+                UtilizationApplied = utilizationApplied,
                 HourlyRate = hourlyRate,
                 EstimatedRevenueSEK = Decimal.Round((decimal)billableHours * hourlyRate, 2),
+                ContractStartDate = contract.StartDate.ToString("yyyy-MM-dd"),
+                ContractEndDate = contract.EndDate.ToString("yyyy-MM-dd"),
+                CalculationDetails = bookedCalculationDetails,
             };
         }
 
@@ -144,27 +164,43 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
         var rate = seniorityRates.TryGetValue(seniorityLevel, out var resolvedRate)
             ? resolvedRate
             : throw new InvalidOperationException($"Seniority rate is not seeded for '{seniorityLevel}'.");
-        var utilization = ResolveUnbookedUtilization(
+        var utilizationContext = ResolveUnbookedUtilization(
             employee,
             periodStart,
             periodEnd,
             contractHistory,
             baseUtilizationTarget);
+        var utilization = utilizationContext.Utilization;
         var unbookedHours = workingHours.AvailableHours * (double)utilization;
+        var unbookedCalculationDetails = BuildUnbookedCalculationDetails(
+            employee.FullName,
+            periodStart,
+            periodEnd,
+            utilizationContext,
+            workingHours.AvailableDays,
+            workingHours.AvailableHours,
+            rate.HourlyRateSEK);
 
         return new ForecastResult
         {
             ConsultantId = employee.EmployeeId,
             Name = employee.FullName,
             SeniorityLevel = seniorityLevel,
+            ForecastBasis = utilizationContext.Basis,
             Status = ForecastStatus.Unbooked,
             BillableHours = unbookedHours,
+            AvailableHoursInMonth = workingHours.AvailableHours,
+            HoursBeforeUtilization = workingHours.AvailableHours,
+            WorkingDaysInMonth = workingHours.AvailableDays,
+            WorkingDaysIncluded = workingHours.AvailableDays,
+            UtilizationApplied = utilization,
             HourlyRate = rate.HourlyRateSEK,
             EstimatedRevenueSEK = Decimal.Round((decimal)unbookedHours * rate.HourlyRateSEK, 2),
+            CalculationDetails = unbookedCalculationDetails,
         };
     }
 
-    private static decimal ResolveUnbookedUtilization(
+    private static UnbookedUtilizationContext ResolveUnbookedUtilization(
         EmployeeSummary employee,
         DateOnly periodStart,
         DateOnly periodEnd,
@@ -177,7 +213,10 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
             periodEnd,
             baseUtilizationTarget);
         if (onboardingUtilization.HasValue)
-            return onboardingUtilization.Value;
+            return new UnbookedUtilizationContext(
+                "onboarding",
+                onboardingUtilization.Value,
+                BuildOnboardingReason(employee, periodStart, periodEnd));
 
         var lastContractEnd = contractHistory
             .Select(ContractEndDate)
@@ -189,9 +228,15 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
         if (lastContractEnd != default &&
             lastContractEnd.AddMonths(1).Year == periodStart.Year &&
             lastContractEnd.AddMonths(1).Month == periodStart.Month)
-            return SalesForecastRules.FirstMonthAfterContractEndUtilization(baseUtilizationTarget);
+            return new UnbookedUtilizationContext(
+                "first-month-after-contract-end",
+                SalesForecastRules.FirstMonthAfterContractEndUtilization(baseUtilizationTarget),
+                $"The latest prior contract ended on {lastContractEnd:yyyy-MM-dd}, so the first month after contract end uses a softer utilization assumption.");
 
-        return baseUtilizationTarget;
+        return new UnbookedUtilizationContext(
+            "benchmark",
+            baseUtilizationTarget,
+            "There is no active contract in the month, so the forecast uses the standard benchmark utilization target.");
     }
 
     private static decimal? ResolveOnboardingUtilization(
@@ -362,4 +407,53 @@ public class SalesForecastIntelligence : ISalesForecastIntelligence
             .First()
             .Role;
     }
+
+    private static string BuildBookedCalculationDetails(
+        string consultantName,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        DateOnly overlapStart,
+        DateOnly overlapEnd,
+        int includedWorkingDays,
+        double availableContractHours,
+        decimal utilizationApplied,
+        decimal hourlyRate)
+    {
+        var overlapReason = overlapStart > periodStart || overlapEnd < periodEnd
+            ? $"The contract only overlaps part of the month, from {overlapStart:yyyy-MM-dd} to {overlapEnd:yyyy-MM-dd}."
+            : $"The contract covers the full month from {periodStart:yyyy-MM-dd} to {periodEnd:yyyy-MM-dd}.";
+
+        return $"{consultantName}: {overlapReason} " +
+            $"{includedWorkingDays} working days are included, giving {availableContractHours:0.##} available hours before utilization. " +
+            $"Booked work uses {(utilizationApplied * 100m):0.#}% utilization, then multiplies by {hourlyRate:0.##} SEK/hour.";
+    }
+
+    private static string BuildUnbookedCalculationDetails(
+        string consultantName,
+        DateOnly periodStart,
+        DateOnly periodEnd,
+        UnbookedUtilizationContext utilizationContext,
+        int workingDaysInMonth,
+        double availableHoursInMonth,
+        decimal hourlyRate)
+    {
+        return $"{consultantName}: {utilizationContext.Reason} " +
+            $"The month runs from {periodStart:yyyy-MM-dd} to {periodEnd:yyyy-MM-dd} with {workingDaysInMonth} available working days and {availableHoursInMonth:0.##} available hours. " +
+            $"The forecast applies {(utilizationContext.Utilization * 100m):0.#}% utilization and {hourlyRate:0.##} SEK/hour.";
+    }
+
+    private static string BuildOnboardingReason(
+        EmployeeSummary employee,
+        DateOnly periodStart,
+        DateOnly periodEnd)
+    {
+        var startDate = DateOnly.FromDateTime(employee.StartDate.UtcDateTime.Date);
+        var onboardingEnd = startDate.AddDays(SalesForecastRules.OnboardingDays - 1);
+        return $"The consultant started on {startDate:yyyy-MM-dd}. The first {SalesForecastRules.OnboardingDays} days are treated as onboarding with 0 billed hours, so only days after {onboardingEnd:yyyy-MM-dd} can contribute in {periodStart:yyyy-MM} to {periodEnd:yyyy-MM-dd}.";
+    }
+
+    private sealed record UnbookedUtilizationContext(
+        string Basis,
+        decimal Utilization,
+        string Reason);
 }

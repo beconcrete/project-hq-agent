@@ -50,7 +50,11 @@ public class SalesForecastChatAgent
     public async Task<string> ChatAsync(string sessionId, string message, CancellationToken ct)
     {
         var history = await LoadHistoryAsync(sessionId, ct);
-        var messages = new List<ChatMessage> { ChatMessage.CreateSystemMessage(BuildSystemPrompt()) };
+        var messages = new List<ChatMessage>
+        {
+            ChatMessage.CreateSystemMessage(BuildSystemPrompt()),
+            ChatMessage.CreateSystemMessage(BuildLanguageInstruction(message)),
+        };
 
         foreach (var turn in history)
         {
@@ -196,10 +200,40 @@ public class SalesForecastChatAgent
             - For any question about a forecast month, consultant forecast, booked revenue, unbooked revenue, or who is booked, always call a forecast tool before answering.
             - Never answer forecast questions from memory or assumptions.
             - Resolve relative dates from today's date. For example, "this month" means {{today:yyyy-MM}}, and "next month" means the month immediately after that.
-            - Answer in the same language as the user's latest message unless they explicitly ask you to switch.
+            - Reply entirely in the language of the user's latest message unless they explicitly ask you to switch.
+            - Do not let older chat history change the response language.
             - Always answer monetary amounts in Swedish kronor (SEK).
             - If the tools return an error or missing data, say that clearly instead of inventing an answer.
+            - When a tool returns consultant details such as CalculationDetails, ContractStartDate, ContractEndDate, WorkingDaysIncluded, HoursBeforeUtilization, or UtilizationApplied, use those fields to explain how the forecast was calculated.
+            - If a consultant has fewer hours because a contract starts mid-month or ends before month-end, say that explicitly and include the relevant dates.
+            - If the user asks what is booked versus estimated, separate booked revenue from unbooked estimated revenue and explain which consultants fall into each group.
             - If asked about something unrelated to sales forecasting or consultant revenue, politely decline and redirect.
             """;
+    }
+
+    private static string BuildLanguageInstruction(string message)
+    {
+        var language = DetectLanguage(message);
+        return language == "sv"
+            ? "The user's latest message is in Swedish. Reply entirely in Swedish."
+            : "The user's latest message is in English. Reply entirely in English.";
+    }
+
+    private static string DetectLanguage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return "en";
+
+        var sample = $" {message.Trim().ToLowerInvariant()} ";
+        if (sample.IndexOfAny(['å', 'ä', 'ö']) >= 0)
+            return "sv";
+
+        string[] swedishMarkers =
+        [
+            " och ", " hur ", " varför ", " vad ", " nästa ", " månad ", " maj ",
+            " ge mig ", " timmar ", " bokad ", " uppskattat ", " konsult "
+        ];
+
+        return swedishMarkers.Any(sample.Contains) ? "sv" : "en";
     }
 }
