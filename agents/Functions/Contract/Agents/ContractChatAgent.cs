@@ -115,6 +115,14 @@ public class ContractChatAgent
         bool isAdmin,
         CancellationToken ct)
     {
+        if (IsNextContractStartQuestion(message))
+        {
+            var result = await AnswerNextContractStartAsync(message, userId, isAdmin, ct);
+            await SaveTurnAsync(sessionId, "user", message, ct);
+            await SaveTurnAsync(sessionId, "assistant", result.Answer, ct);
+            return result;
+        }
+
         var history = await LoadHistoryAsync(sessionId, ct);
 
         var systemPrompt = contextCorrelationId is not null
@@ -161,6 +169,51 @@ public class ContractChatAgent
         await SaveTurnAsync(sessionId, "assistant", answer,  ct);
 
         return new ChatResult(answer, MiniModel, references.Values.ToArray());
+    }
+
+    private async Task<ChatResult> AnswerNextContractStartAsync(
+        string message,
+        string userId,
+        bool isAdmin,
+        CancellationToken ct)
+    {
+        var contracts = await _contractIntelligence.FindUpcomingStartsAsync(
+            Caller(userId, isAdmin),
+            null,
+            null,
+            ct);
+
+        var next = contracts
+            .Where(c => ContractStartDate(c).HasValue)
+            .OrderBy(c => ContractStartDate(c))
+            .FirstOrDefault();
+
+        var isSwedish = LooksSwedish(message);
+
+        if (next is null)
+        {
+            return new ChatResult(
+                isSwedish
+                    ? "Det finns inga kommande kontraktstarter i den tillgängliga kontraktsdatan."
+                    : "There are no upcoming contract start dates in the available contract data.",
+                MiniModel,
+                []);
+        }
+
+        var startDate = ContractStartDate(next)!.Value;
+        var consultant = ExtractConsultantName(next);
+        var counterparty = !string.IsNullOrWhiteSpace(next.CustomerName)
+            ? next.CustomerName
+            : next.PrimaryCounterparty;
+
+        var answer = isSwedish
+            ? $"Nästa kontrakt startar {startDate:yyyy-MM-dd} för {consultant} med {counterparty}."
+            : $"The next contract starts on {startDate:yyyy-MM-dd} for {consultant} with {counterparty}.";
+
+        return new ChatResult(
+            answer,
+            MiniModel,
+            [new ContractReference(next.CorrelationId, next.FileName, next.DocumentType)]);
     }
 
     // ── Scope guardrail ───────────────────────────────────────────────────────
@@ -268,6 +321,32 @@ public class ContractChatAgent
             normalized.Contains("renew");
 
         return hasContractSearchIntent;
+    }
+
+    private static bool IsNextContractStartQuestion(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return false;
+
+        var normalized = message.Trim().ToLowerInvariant();
+        return
+            normalized.Contains("next contract start") ||
+            normalized.Contains("next contract starts") ||
+            normalized.Contains("next start date") ||
+            normalized.Contains("upcoming contract start") ||
+            normalized.Contains("när startar nästa kontrakt") ||
+            normalized.Contains("nästa kontrakt start") ||
+            normalized.Contains("vårt nästa kontrakt start");
+    }
+
+    private static bool LooksSwedish(string message)
+    {
+        var normalized = message.ToLowerInvariant();
+        return normalized.Contains("nästa") ||
+            normalized.Contains("när") ||
+            normalized.Contains("kontrakt") ||
+            normalized.Contains("startar") ||
+            normalized.Contains("vårt");
     }
 
     private static string ExtractOutermostJson(string text)
@@ -488,6 +567,23 @@ public class ContractChatAgent
     {
         var value = ParseArg(args, key);
         return DateOnly.TryParse(value, out var date) ? date : null;
+    }
+
+    private static DateOnly? ContractStartDate(ContractSummary contract) =>
+        contract.AssignmentStartDate is DateTime assignmentStart
+            ? DateOnly.FromDateTime(assignmentStart)
+            : contract.EffectiveDate is DateTime effectiveDate
+                ? DateOnly.FromDateTime(effectiveDate)
+                : null;
+
+    private static string ExtractConsultantName(ContractSummary contract)
+    {
+        var candidate = contract.PeopleMentioned.FirstOrDefault(name =>
+            !string.IsNullOrWhiteSpace(name) &&
+            !name.Contains("AB", StringComparison.OrdinalIgnoreCase) &&
+            !name.Contains("Concrete", StringComparison.OrdinalIgnoreCase));
+
+        return string.IsNullOrWhiteSpace(candidate) ? "the consultant" : candidate;
     }
 
     private static int? ParseIntArg(BinaryData args, string key)
