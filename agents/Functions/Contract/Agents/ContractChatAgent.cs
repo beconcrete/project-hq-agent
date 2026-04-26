@@ -36,10 +36,13 @@ public class ContractChatAgent
         Use list_contracts to inspect the visible contract portfolio.
         Use get_contract to retrieve extracted fields for a specific contract.
         Use get_contract_document only when extracted fields lack the detail needed to answer the question.
+        Use search and list tools to discover candidate contracts, then call get_contract for the contract or contracts you actually rely on in the final answer.
+        Only contracts you explicitly inspect with get_contract or get_contract_document should be treated as the cited source for your answer.
 
         Answer accurately and concisely. Never hallucinate contract data, dates, parties, or clauses.
         If a contract has reviewState pending_review, say that the extracted data needs review when it affects the answer.
         If relationshipType indicates replacement, extension, or duplicate context, mention it when it affects the answer.
+        When answering about a consulting assignment start date, mention both the consultant and the customer or counterparty when known.
         Deleted or rejected contracts are not active contracts and should not be treated as available agreements.
         If you cannot find the answer in the available data, say so clearly.
         """;
@@ -336,7 +339,6 @@ public class ContractChatAgent
         CancellationToken ct)
     {
         var contracts = await _contractIntelligence.ListContractsAsync(Caller(userId, isAdmin), ct);
-        AddReferences(references, contracts.Take(10));
         return JsonSerializer.Serialize(contracts);
     }
 
@@ -352,7 +354,6 @@ public class ContractChatAgent
         var contractType = ParseArg(call.FunctionArguments, "contractType");
         var contracts = await _contractIntelligence.FindExpiringAsync(
             Caller(userId, isAdmin), from, to, contractType, ct);
-        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
@@ -367,7 +368,6 @@ public class ContractChatAgent
         var to = ParseDateArg(call.FunctionArguments, "to");
         var contracts = await _contractIntelligence.FindRenewalWindowsAsync(
             Caller(userId, isAdmin), from, to, ct);
-        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
@@ -382,7 +382,6 @@ public class ContractChatAgent
         var to = ParseDateArg(call.FunctionArguments, "to");
         var contracts = await _contractIntelligence.FindUpcomingStartsAsync(
             Caller(userId, isAdmin), from, to, ct);
-        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
@@ -397,7 +396,6 @@ public class ContractChatAgent
         if (personName is null) return "Missing personName argument";
         var contracts = await _contractIntelligence.FindByPersonAsync(
             Caller(userId, isAdmin), personName, ct);
-        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
@@ -412,7 +410,6 @@ public class ContractChatAgent
         if (counterparty is null) return "Missing counterparty argument";
         var contracts = await _contractIntelligence.FindByCounterpartyAsync(
             Caller(userId, isAdmin), counterparty, ct);
-        AddReferences(references, contracts);
         return JsonSerializer.Serialize(contracts);
     }
 
