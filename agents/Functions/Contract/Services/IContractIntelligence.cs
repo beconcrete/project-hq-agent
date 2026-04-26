@@ -9,5 +9,6 @@ public interface IContractIntelligence
     Task<IReadOnlyList<ContractSummary>> FindRenewalWindowsAsync(ContractCallerContext caller, DateOnly? from, DateOnly? to, CancellationToken ct);
     Task<IReadOnlyList<ContractSummary>> FindByPersonAsync(ContractCallerContext caller, string personName, CancellationToken ct);
     Task<IReadOnlyList<ContractSummary>> FindByCounterpartyAsync(ContractCallerContext caller, string counterparty, CancellationToken ct);
+    Task<ContractPeriodResult?> FindContractForPeriodAsync(string consultantName, int year, int month, ContractCallerContext caller, CancellationToken ct);
     Task<ContractAnswer> AnswerAsync(ContractQuestion question, CancellationToken ct);
 }

@@ -45,6 +45,7 @@ public class HRIntelligence : IHRIntelligence
             Status          = "active",
             BaseSalary      = (double)request.BaseSalary,
             BillingBaseRate = (double)request.BillingBaseRate,
+            SeniorityLevel  = request.SeniorityLevel ?? "",
             VacationBalance = request.VacationBalance,
         };
 
@@ -64,6 +65,7 @@ public class HRIntelligence : IHRIntelligence
         if (request.StartDate       is not null) entity.StartDate       = request.StartDate.Value;
         if (request.BaseSalary      is not null) entity.BaseSalary      = (double)request.BaseSalary.Value;
         if (request.BillingBaseRate is not null) entity.BillingBaseRate = (double)request.BillingBaseRate.Value;
+        if (request.SeniorityLevel  is not null) entity.SeniorityLevel  = request.SeniorityLevel;
         if (request.VacationBalance is not null) entity.VacationBalance = request.VacationBalance.Value;
 
         await _storage.WriteEmployeeAsync(entity, ct);
@@ -127,5 +129,6 @@ public class HRIntelligence : IHRIntelligence
         OffboardDate:   e.OffboardDate,
         BaseSalary:     (decimal)e.BaseSalary,
         BillingBaseRate: (decimal)e.BillingBaseRate,
+        SeniorityLevel: e.SeniorityLevel,
         VacationBalance: e.VacationBalance);
 }

@@ -129,6 +129,40 @@ public class ContractIntelligence : IContractIntelligence
             .ToArray();
     }
 
+    public async Task<ContractPeriodResult?> FindContractForPeriodAsync(
+        string consultantName,
+        int year,
+        int month,
+        ContractCallerContext caller,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(consultantName) || month is < 1 or > 12)
+            return null;
+
+        var periodStart = new DateOnly(year, month, 1);
+        var periodEnd = periodStart.AddMonths(1).AddDays(-1);
+
+        var entities = await LoadVisibleEntitiesAsync(caller, ct);
+        return entities
+            .Where(e => OverlapsMonth(e, periodStart, periodEnd))
+            .Where(e => MentionsConsultant(e, consultantName))
+            .Select(e => new
+            {
+                Entity = e,
+                StartDate = DateOnly.FromDateTime((e.AssignmentStartDate ?? e.EffectiveDate)!.Value),
+                EndDate = DateOnly.FromDateTime((e.AssignmentEndDate ?? e.ExpiryDate)!.Value),
+            })
+            .OrderByDescending(x => CalculateOverlapDays(x.StartDate, x.EndDate, periodStart, periodEnd))
+            .ThenBy(x => x.StartDate)
+            .Select(x => new ContractPeriodResult(
+                consultantName.Trim(),
+                x.StartDate,
+                x.EndDate,
+                ParseHourlyRateSek(x.Entity),
+                x.Entity.PartitionKey))
+            .FirstOrDefault();
+    }
+
     public async Task<ContractAnswer> AnswerAsync(ContractQuestion question, CancellationToken ct)
     {
         var text = question.Question;
@@ -211,6 +245,81 @@ public class ContractIntelligence : IContractIntelligence
 
     private static bool ContainsAny(IEnumerable<string> values, string query) =>
         values.Any(value => value.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+    private static bool MentionsConsultant(ContractExtractionEntity entity, string consultantName)
+    {
+        var values = ParseJsonList(entity.PeopleMentioned);
+        return ContainsAny(values, consultantName) ||
+            entity.Fields.Contains(consultantName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool OverlapsMonth(
+        ContractExtractionEntity entity,
+        DateOnly periodStart,
+        DateOnly periodEnd)
+    {
+        var start = entity.AssignmentStartDate ?? entity.EffectiveDate;
+        var end = entity.AssignmentEndDate ?? entity.ExpiryDate;
+        if (!start.HasValue || !end.HasValue)
+            return false;
+
+        return DateOnly.FromDateTime(start.Value) <= periodEnd &&
+            DateOnly.FromDateTime(end.Value) >= periodStart;
+    }
+
+    private static int CalculateOverlapDays(
+        DateOnly contractStart,
+        DateOnly contractEnd,
+        DateOnly periodStart,
+        DateOnly periodEnd)
+    {
+        var overlapStart = contractStart > periodStart ? contractStart : periodStart;
+        var overlapEnd = contractEnd < periodEnd ? contractEnd : periodEnd;
+        return overlapEnd < overlapStart ? 0 : overlapEnd.DayNumber - overlapStart.DayNumber + 1;
+    }
+
+    private static decimal? ParseHourlyRateSek(ContractExtractionEntity entity)
+    {
+        if (entity.PaymentAmount.HasValue &&
+            string.Equals(entity.PaymentCurrency, "SEK", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(entity.PaymentUnit, "hour", StringComparison.OrdinalIgnoreCase))
+            return (decimal)entity.PaymentAmount.Value;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(entity.Fields);
+            if (!doc.RootElement.TryGetProperty("extractedFields", out var extracted))
+                return null;
+
+            if (TryReadDecimal(extracted, "hourlyRateSEK", out var explicitHourlyRate))
+                return explicitHourlyRate;
+
+            if (TryReadDecimal(extracted, "paymentAmount", out var paymentAmount) &&
+                extracted.TryGetProperty("paymentCurrency", out var currency) &&
+                extracted.TryGetProperty("paymentUnit", out var unit) &&
+                string.Equals(currency.GetString(), "SEK", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(unit.GetString(), "hour", StringComparison.OrdinalIgnoreCase))
+                return paymentAmount;
+        }
+        catch (JsonException)
+        {
+        }
+
+        return null;
+    }
+
+    private static bool TryReadDecimal(JsonElement element, string propertyName, out decimal value)
+    {
+        value = 0;
+        if (!element.TryGetProperty(propertyName, out var property))
+            return false;
+
+        if (property.ValueKind == JsonValueKind.Number)
+            return property.TryGetDecimal(out value);
+
+        return property.ValueKind == JsonValueKind.String &&
+            decimal.TryParse(property.GetString(), out value);
+    }
 
     private static DateTime? ToDateTime(DateOnly? date) =>
         date?.ToDateTime(TimeOnly.MinValue);

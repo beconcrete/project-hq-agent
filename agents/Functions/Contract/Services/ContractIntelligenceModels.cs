@@ -53,3 +53,10 @@ public record ContractReference(
     string CorrelationId,
     string FileName,
     string DocumentType);
+
+public record ContractPeriodResult(
+    string ConsultantName,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    decimal? HourlyRateSEK,
+    string ContractId);

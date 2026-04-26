@@ -9,6 +9,7 @@ public record EmployeeSummary(
     DateTimeOffset? OffboardDate,
     decimal BaseSalary,
     decimal BillingBaseRate,
+    string SeniorityLevel,
     int VacationBalance);
 
 public record SalaryResult(
@@ -33,6 +34,7 @@ public record AddEmployeeRequest(
     DateTimeOffset StartDate,
     decimal BaseSalary,
     decimal BillingBaseRate,
+    string? SeniorityLevel = null,
     int VacationBalance = 30);
 
 public record UpdateEmployeeRequest(
@@ -41,4 +43,5 @@ public record UpdateEmployeeRequest(
     DateTimeOffset? StartDate = null,
     decimal? BaseSalary = null,
     decimal? BillingBaseRate = null,
+    string? SeniorityLevel = null,
     int? VacationBalance = null);

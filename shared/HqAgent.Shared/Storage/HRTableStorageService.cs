@@ -9,9 +9,6 @@ public class HRTableStorageService
 {
     private readonly TableServiceClient _client;
     private readonly ILogger<HRTableStorageService> _logger;
-    private const string EmployeesTable = "Employees";
-    private const string HRConfigTable = "HRConfig";
-
     public HRTableStorageService(TableServiceClient client, ILogger<HRTableStorageService> logger)
     {
         _client = client;
@@ -20,7 +17,7 @@ public class HRTableStorageService
 
     public async Task<List<EmployeeEntity>> ListEmployeesAsync(bool includeOffboarded = false, CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(EmployeesTable);
+        var table = _client.GetTableClient(TableNames.Employees);
         await table.CreateIfNotExistsAsync(ct);
 
         var results = new List<EmployeeEntity>();
@@ -36,7 +33,7 @@ public class HRTableStorageService
 
     public async Task<EmployeeEntity?> GetEmployeeAsync(string employeeId, CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(EmployeesTable);
+        var table = _client.GetTableClient(TableNames.Employees);
         await table.CreateIfNotExistsAsync(ct);
 
         try
@@ -52,7 +49,7 @@ public class HRTableStorageService
 
     public async Task WriteEmployeeAsync(EmployeeEntity entity, CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(EmployeesTable);
+        var table = _client.GetTableClient(TableNames.Employees);
         await table.CreateIfNotExistsAsync(ct);
 
         entity.PartitionKey = "employees";
@@ -66,7 +63,7 @@ public class HRTableStorageService
     // Always reads fresh — never cached. Callers must not cache the return value.
     public async Task<HRConfigEntity> GetHRConfigAsync(CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(HRConfigTable);
+        var table = _client.GetTableClient(TableNames.HRConfig);
         await table.CreateIfNotExistsAsync(ct);
 
         try
@@ -85,7 +82,7 @@ public class HRTableStorageService
 
     public async Task WriteHRConfigAsync(HRConfigEntity entity, CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(HRConfigTable);
+        var table = _client.GetTableClient(TableNames.HRConfig);
         await table.CreateIfNotExistsAsync(ct);
 
         entity.PartitionKey = "hrconfig";

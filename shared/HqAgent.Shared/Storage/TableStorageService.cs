@@ -10,8 +10,6 @@ public class TableStorageService
 {
     private readonly TableServiceClient _client;
     private readonly ILogger<TableStorageService> _logger;
-    private const string TableName = "Contracts";
-
     public TableStorageService(TableServiceClient client, ILogger<TableStorageService> logger)
     {
         _client = client;
@@ -63,7 +61,7 @@ public class TableStorageService
             ReviewState      = extraction.PendingReview ? "pending_review" : "approved_by_extraction",
         };
 
-        var table = _client.GetTableClient(TableName);
+        var table = _client.GetTableClient(TableNames.Contracts);
         await table.CreateIfNotExistsAsync(cancellationToken: ct);
         var candidates = await FindRelationshipCandidatesAsync(table, entity, ct);
         var primaryCandidate = candidates.FirstOrDefault();
@@ -92,7 +90,7 @@ public class TableStorageService
         int?              retryCount = null,
         CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(TableName);
+        var table = _client.GetTableClient(TableNames.Contracts);
         await table.CreateIfNotExistsAsync(cancellationToken: ct);
 
         ContractExtractionEntity entity;
@@ -139,7 +137,7 @@ public class TableStorageService
         int?              retryCount = null,
         CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(TableName);
+        var table = _client.GetTableClient(TableNames.Contracts);
         await table.CreateIfNotExistsAsync(cancellationToken: ct);
 
         ContractExtractionEntity entity;
@@ -184,7 +182,7 @@ public class TableStorageService
         string            correlationId,
         CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(TableName);
+        var table = _client.GetTableClient(TableNames.Contracts);
         try
         {
             var response = await table.GetEntityAsync<ContractExtractionEntity>(
@@ -202,7 +200,7 @@ public class TableStorageService
         CancellationToken ct     = default,
         bool              includeDeleted = false)
     {
-        var table = _client.GetTableClient(TableName);
+        var table = _client.GetTableClient(TableNames.Contracts);
         var results = new List<ContractExtractionEntity>();
 
         var filter = userId != null
@@ -236,7 +234,7 @@ public class TableStorageService
         string?           relatedCorrelationId = null,
         CancellationToken ct = default)
     {
-        var table = _client.GetTableClient(TableName);
+        var table = _client.GetTableClient(TableNames.Contracts);
         ContractExtractionEntity entity;
         try
         {

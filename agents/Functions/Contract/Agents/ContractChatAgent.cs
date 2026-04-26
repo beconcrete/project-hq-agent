@@ -66,6 +66,10 @@ public class ContractChatAgent
             "Find contracts by customer, supplier, vendor, client, or other counterparty name. Results include normalized payment facts when available.",
             BinaryData.FromString("""{"type":"object","properties":{"counterparty":{"type":"string","description":"The counterparty name to search for"}},"required":["counterparty"]}""")),
         ChatTool.CreateFunctionTool(
+            "find_contract_for_period",
+            "Find the active contract for a specific consultant in a given month. Returns null if no contract exists.",
+            BinaryData.FromString("""{"type":"object","properties":{"consultantName":{"type":"string","description":"The consultant name to search for"},"year":{"type":"integer","description":"The target year"},"month":{"type":"integer","description":"The target month from 1 to 12"}},"required":["consultantName","year","month"]}""")),
+        ChatTool.CreateFunctionTool(
             "get_contract",
             "Get normalized facts and extracted fields for a specific contract by its correlation ID.",
             BinaryData.FromString("""{"type":"object","properties":{"correlationId":{"type":"string","description":"The contract correlation ID"}},"required":["correlationId"]}""")),
@@ -322,6 +326,7 @@ public class ContractChatAgent
             "find_renewal_windows"  => await FindRenewalWindowsToolAsync(call, userId, isAdmin, references, ct),
             "find_contracts_by_person" => await FindContractsByPersonToolAsync(call, userId, isAdmin, references, ct),
             "find_contracts_by_counterparty" => await FindContractsByCounterpartyToolAsync(call, userId, isAdmin, references, ct),
+            "find_contract_for_period" => await FindContractForPeriodToolAsync(call, userId, isAdmin, ct),
             "get_contract"          => await GetContractToolAsync(call, userId, isAdmin, references, ct),
             "get_contract_document" => await GetContractDocumentToolAsync(call, userId, isAdmin, references, ct),
             _                       => "Unknown tool",
@@ -422,6 +427,25 @@ public class ContractChatAgent
         });
     }
 
+    private async Task<string> FindContractForPeriodToolAsync(
+        ChatToolCall call,
+        string userId,
+        bool isAdmin,
+        CancellationToken ct)
+    {
+        var consultantName = ParseArg(call.FunctionArguments, "consultantName");
+        var year = ParseIntArg(call.FunctionArguments, "year");
+        var month = ParseIntArg(call.FunctionArguments, "month");
+
+        if (consultantName is null) return "Missing consultantName argument";
+        if (year is null) return "Missing year argument";
+        if (month is null) return "Missing month argument";
+
+        var result = await _contractIntelligence.FindContractForPeriodAsync(
+            consultantName, year.Value, month.Value, Caller(userId, isAdmin), ct);
+        return JsonSerializer.Serialize(result);
+    }
+
     private async Task<string> GetContractDocumentToolAsync(
         ChatToolCall call,
         string userId,
@@ -455,6 +479,17 @@ public class ContractChatAgent
     {
         var value = ParseArg(args, key);
         return DateOnly.TryParse(value, out var date) ? date : null;
+    }
+
+    private static int? ParseIntArg(BinaryData args, string key)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(args);
+            if (!doc.RootElement.TryGetProperty(key, out var val)) return null;
+            return val.ValueKind == JsonValueKind.Number ? val.GetInt32() : null;
+        }
+        catch { return null; }
     }
 
     private static ContractCallerContext Caller(string userId, bool isAdmin) => new(userId, isAdmin);

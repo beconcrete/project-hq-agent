@@ -96,6 +96,31 @@
           </router-link>
         </li>
 
+        <li
+          class="nav-item"
+          :class="{ active: $route.path === '/sales-forecast' }"
+        >
+          <router-link
+            to="/sales-forecast"
+            class="nav-link"
+            @click="sidebar.closeMobile()"
+          >
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="4" y1="20" x2="20" y2="20" />
+              <line x1="7" y1="16" x2="7" y2="10" />
+              <line x1="12" y1="16" x2="12" y2="6" />
+              <line x1="17" y1="16" x2="17" y2="12" />
+            </svg>
+            <span class="nav-label">Sales Forecast</span>
+          </router-link>
+        </li>
+
         <!-- Coming soon modules -->
         <li
           v-for="item in comingSoon"

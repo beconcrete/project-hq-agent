@@ -211,7 +211,12 @@ public class HRChatAgent
         var vacationBalance = ParseIntArg(args, "vacationBalance") ?? 30;
 
         var request = new AddEmployeeRequest(
-            fullName, email, startDate, baseSalaryStr.Value, billingRateStr.Value, vacationBalance);
+            FullName: fullName,
+            Email: email,
+            StartDate: startDate,
+            BaseSalary: baseSalaryStr.Value,
+            BillingBaseRate: billingRateStr.Value,
+            VacationBalance: vacationBalance);
         var employee = await _hr.AddEmployeeAsync(request, ct);
         return JsonSerializer.Serialize(employee);
     }

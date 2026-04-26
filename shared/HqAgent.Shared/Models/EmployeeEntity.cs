@@ -18,5 +18,6 @@ public class EmployeeEntity : ITableEntity
     public DateTimeOffset? OffboardDate { get; set; }
     public double BaseSalary { get; set; }       // SEK — double because Table Storage does not support decimal
     public double BillingBaseRate { get; set; }  // SEK/hr
+    public string SeniorityLevel { get; set; } = string.Empty;
     public int VacationBalance { get; set; } = 30; // days
 }
