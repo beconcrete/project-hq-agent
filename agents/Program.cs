@@ -35,6 +35,7 @@ var host = new HostBuilder()
         services.AddSingleton<IContractIntelligence, ContractIntelligence>();
         services.AddSingleton<IHRIntelligence, HRIntelligence>();
         services.AddSingleton<ISalesForecastIntelligence, SalesForecastIntelligence>();
+        services.AddSingleton<SalesForecastStructuredResponder>();
 
         services.AddSingleton<ContractOrchestratorAgent>();
         services.AddSingleton<ContractChatAgent>();

@@ -30,16 +30,19 @@ public class SalesForecastChatAgent
     private readonly ChatClient _chatClient;
     private readonly TableServiceClient _tableClient;
     private readonly ISalesForecastIntelligence _forecast;
+    private readonly SalesForecastStructuredResponder _structuredResponder;
     private readonly ILogger<SalesForecastChatAgent> _logger;
 
     public SalesForecastChatAgent(
         TableServiceClient tableClient,
         ISalesForecastIntelligence forecast,
+        SalesForecastStructuredResponder structuredResponder,
         IConfiguration config,
         ILogger<SalesForecastChatAgent> logger)
     {
         _tableClient = tableClient;
         _forecast = forecast;
+        _structuredResponder = structuredResponder;
         _logger = logger;
 
         var apiKey = config["OPENAI_API_KEY"]
@@ -50,6 +53,15 @@ public class SalesForecastChatAgent
     public async Task<string> ChatAsync(string sessionId, string message, CancellationToken ct)
     {
         var history = await LoadHistoryAsync(sessionId, ct);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var structured = await _structuredResponder.TryRespondAsync(message, history, today, ct);
+        if (structured is not null)
+        {
+            await SaveTurnAsync(sessionId, "user", message, ct);
+            await SaveTurnAsync(sessionId, "assistant", structured.Text, ct);
+            return structured.Text;
+        }
+
         var messages = new List<ChatMessage>
         {
             ChatMessage.CreateSystemMessage(BuildSystemPrompt()),
