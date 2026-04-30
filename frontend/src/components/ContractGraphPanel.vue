@@ -533,12 +533,10 @@ const cytoscapeStyle = [
       height: "data(size)",
       shape: "data(shape)",
       "background-color": "data(color)",
-      "background-opacity": 0.92,
-      "border-width": 1.5,
-      "border-color": "#f1f5f9",
-      "border-style": "solid",
+      "background-opacity": 1,
+      "border-width": 0,
       label: "data(label)",
-      color: "#f1f5f9",
+      color: "#ffffff",
       "font-size": 10,
       "font-family": 'Georgia, Cambria, "Times New Roman", serif',
       "font-weight": 600,
@@ -549,11 +547,11 @@ const cytoscapeStyle = [
       "text-margin-y": 8,
       "overlay-padding": 8,
       "overlay-opacity": 0,
-      "shadow-blur": 24,
+      "shadow-blur": 20,
       "shadow-color": "data(color)",
-      "shadow-opacity": 0.38,
+      "shadow-opacity": 0.28,
       "shadow-offset-x": 0,
-      "shadow-offset-y": 0,
+      "shadow-offset-y": 4,
       "transition-property":
         "opacity, width, height, border-width, shadow-blur, shadow-opacity",
       "transition-duration": "200ms",
@@ -566,10 +564,9 @@ const cytoscapeStyle = [
       "font-weight": 700,
       "text-valign": "center",
       "text-margin-y": 0,
-      "border-width": 3,
-      "border-color": "rgba(241,245,249,0.75)",
-      "shadow-blur": 36,
-      "shadow-opacity": 0.6,
+      "border-width": 0,
+      "shadow-blur": 32,
+      "shadow-opacity": 0.32,
     },
   },
   {
@@ -579,9 +576,8 @@ const cytoscapeStyle = [
       "font-weight": 700,
       "text-valign": "center",
       "text-margin-y": 0,
-      "border-width": 2,
-      "shadow-blur": 28,
-      "shadow-opacity": 0.5,
+      "shadow-blur": 24,
+      "shadow-opacity": 0.3,
     },
   },
   {
@@ -589,33 +585,30 @@ const cytoscapeStyle = [
     style: {
       "font-size": 9,
       "text-max-width": 72,
-      "shadow-blur": 16,
-      "shadow-opacity": 0.28,
-      "background-opacity": 0.72,
+      "shadow-blur": 14,
+      "shadow-opacity": 0.22,
     },
   },
   {
     selector: "node.hovered",
     style: {
-      "border-width": 3,
-      "shadow-blur": 32,
-      "shadow-opacity": 0.62,
+      "shadow-blur": 30,
+      "shadow-opacity": 0.48,
     },
   },
   {
     selector: "node:selected",
     style: {
-      "border-width": 4,
-      "border-color": "#ffffff",
-      "shadow-blur": 44,
-      "shadow-opacity": 0.76,
+      "border-width": 3,
+      "border-color": "rgba(0,0,0,0.18)",
+      "shadow-blur": 40,
+      "shadow-opacity": 0.55,
     },
   },
   {
     selector: "node.is-ancestor",
     style: {
-      opacity: 0.55,
-      "border-style": "dashed",
+      opacity: 0.45,
     },
   },
   {
@@ -625,9 +618,9 @@ const cytoscapeStyle = [
   {
     selector: "edge",
     style: {
-      width: 1.8,
-      "line-color": "data(color)",
-      opacity: 0.35,
+      width: 1.5,
+      "line-color": "#c8bfb0",
+      opacity: 0.7,
       "curve-style": "bezier",
       "target-arrow-shape": "none",
       "line-cap": "round",
@@ -727,7 +720,7 @@ onUnmounted(() => {
 .graph-canvas {
   width: 100%;
   height: 480px;
-  background: #0d1b2a;
+  background: #fbfaf7;
   display: block;
 }
 
@@ -744,10 +737,10 @@ onUnmounted(() => {
 .ctrl-btn {
   width: 2rem;
   height: 2rem;
-  border: 1px solid rgba(241, 245, 249, 0.18);
+  border: 1px solid #ddd7cd;
   border-radius: 7px;
-  background: rgba(13, 27, 42, 0.82);
-  color: #c8d8e8;
+  background: rgba(255, 255, 255, 0.9);
+  color: #746f67;
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -755,10 +748,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(4px);
-  transition: background 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .ctrl-btn:hover {
-  background: rgba(18, 107, 95, 0.7);
+  background: #e7f2ef;
+  color: #126b5f;
 }
 
 .graph-breadcrumb {
@@ -770,19 +766,22 @@ onUnmounted(() => {
 
 .breadcrumb-btn {
   padding: 0.35rem 0.7rem;
-  border: 1px solid rgba(241, 245, 249, 0.18);
+  border: 1px solid #ddd7cd;
   border-radius: 7px;
-  background: rgba(13, 27, 42, 0.82);
-  color: #c8d8e8;
+  background: rgba(255, 255, 255, 0.9);
+  color: #746f67;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   backdrop-filter: blur(4px);
-  transition: background 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 .breadcrumb-btn:hover {
-  background: rgba(18, 107, 95, 0.7);
+  background: #e7f2ef;
+  color: #126b5f;
 }
 
 .graph-overlay {
@@ -791,17 +790,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 27, 42, 0.72);
+  background: rgba(251, 250, 247, 0.82);
   z-index: 8;
 }
 
 .graph-state-card {
-  background: rgba(18, 28, 40, 0.95);
-  border: 1px solid rgba(241, 245, 249, 0.12);
+  background: #fff;
+  border: 1px solid #ddd7cd;
   border-radius: 14px;
   padding: 1.5rem 2rem;
   text-align: center;
   max-width: 320px;
+  box-shadow: 0 4px 24px rgba(24, 21, 17, 0.08);
 }
 
 .graph-state-kicker {
@@ -809,23 +809,23 @@ onUnmounted(() => {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6baa9f;
+  color: #126b5f;
   margin: 0 0 0.4rem;
 }
 
 .graph-state-copy {
   font-size: 0.88rem;
-  color: #94a3b8;
+  color: #746f67;
   margin: 0 0 0.75rem;
   line-height: 1.45;
 }
 
 .graph-state-btn {
   padding: 0.45rem 1rem;
-  border: 1px solid rgba(18, 107, 95, 0.6);
+  border: 1px solid #b7d2cc;
   border-radius: 8px;
   background: transparent;
-  color: #6baa9f;
+  color: #126b5f;
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
@@ -833,6 +833,6 @@ onUnmounted(() => {
   transition: background 0.12s;
 }
 .graph-state-btn:hover {
-  background: rgba(18, 107, 95, 0.18);
+  background: #e7f2ef;
 }
 </style>

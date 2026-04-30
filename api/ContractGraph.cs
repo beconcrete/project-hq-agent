@@ -129,13 +129,31 @@ public class ContractGraph
         return res;
     }
 
+    // Names that represent "us" — should never appear as party nodes
+    private static readonly HashSet<string> OwnNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "be concrete ab", "be concrete", "björn eriksen", "bjorn eriksen",
+    };
+
+    private static bool IsOwnEntity(string name) =>
+        !string.IsNullOrWhiteSpace(name) && OwnNames.Contains(name.Trim());
+
     private static string EffectiveParty(HqAgent.Shared.Models.ContractExtractionEntity entity)
     {
         if (!string.IsNullOrWhiteSpace(entity.ManualPartyOverride))
             return entity.ManualPartyOverride;
-        if (!string.IsNullOrWhiteSpace(entity.PrimaryCounterparty))
+
+        // Use PrimaryCounterparty unless it's our own company/person
+        if (!string.IsNullOrWhiteSpace(entity.PrimaryCounterparty) &&
+            !IsOwnEntity(entity.PrimaryCounterparty))
             return entity.PrimaryCounterparty;
-        return "__unknown__";
+
+        // Fall back to first non-own name in the counterparty array
+        var others = ParseJsonList(entity.CounterpartyNames)
+            .Where(n => !string.IsNullOrWhiteSpace(n) && !IsOwnEntity(n))
+            .ToList();
+
+        return others.Count > 0 ? others[0] : "__unknown__";
     }
 
     private static string ContractLabel(HqAgent.Shared.Models.ContractExtractionEntity entity)
