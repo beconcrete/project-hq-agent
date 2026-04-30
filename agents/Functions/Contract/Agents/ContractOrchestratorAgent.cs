@@ -166,7 +166,11 @@ public class ContractOrchestratorAgent
         var (bytes, contentType) = await _blobs.DownloadAsync(msg.ContainerName, msg.BlobName, ct);
         var text = await _textExtractor.ExtractAsync(bytes, contentType, msg.BlobName, ct);
 
-        return new ChatMessage(ChatRole.User, [new TextContent(text)]);
+        var content = string.IsNullOrWhiteSpace(msg.ProcessingHint)
+            ? text
+            : $"[Reprocessing note: {msg.ProcessingHint}]\n\n{text}";
+
+        return new ChatMessage(ChatRole.User, [new TextContent(content)]);
     }
 
     private static ExtractionResult ParseExtraction(string raw)

@@ -68,6 +68,19 @@
           >
             Assign to party
           </button>
+          <template v-if="node.data.reviewState === 'failed'">
+            <button
+              v-if="!reprocessDone"
+              class="detail-btn detail-btn--reprocess"
+              type="button"
+              :disabled="reprocessing"
+              @click="doReprocess"
+            >
+              {{ reprocessing ? "Requeuing…" : "Reprocess" }}
+            </button>
+            <p v-else class="detail-ok">Queued for reprocessing</p>
+            <p v-if="reprocessError" class="detail-err">{{ reprocessError }}</p>
+          </template>
           <template v-if="!deleteConfirm">
             <button
               class="detail-btn detail-btn--danger"
@@ -143,6 +156,9 @@ const auth = useAuth();
 const deleteConfirm = ref(false);
 const deleting = ref(false);
 const deleteError = ref("");
+const reprocessing = ref(false);
+const reprocessDone = ref(false);
+const reprocessError = ref("");
 
 const riskFlags = computed(() => {
   const flags = props.node?.data?.riskFlags;
@@ -187,8 +203,32 @@ watch(
     deleteConfirm.value = false;
     deleting.value = false;
     deleteError.value = "";
+    reprocessing.value = false;
+    reprocessDone.value = false;
+    reprocessError.value = "";
   },
 );
+
+async function doReprocess() {
+  reprocessing.value = true;
+  reprocessError.value = "";
+  try {
+    const res = await fetch("/api/contract-reprocess", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": `Bearer ${auth.getToken()}`,
+      },
+      body: JSON.stringify({ rowKey: props.node.data.rowKey }),
+    });
+    if (!res.ok) throw new Error(`Reprocess failed (${res.status})`);
+    reprocessDone.value = true;
+  } catch (e) {
+    reprocessError.value = e.message || "Reprocess failed";
+  } finally {
+    reprocessing.value = false;
+  }
+}
 
 async function doDelete() {
   deleting.value = true;
@@ -424,6 +464,21 @@ async function doDelete() {
 }
 .detail-btn--ghost:hover {
   background: #e5e0d8;
+}
+
+.detail-btn--reprocess {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.detail-btn--reprocess:hover:not(:disabled) {
+  background: #bfdbfe;
+}
+
+.detail-ok {
+  font-size: 0.75rem;
+  color: #065f46;
+  margin: 0;
+  font-weight: 600;
 }
 
 .detail-confirm {
