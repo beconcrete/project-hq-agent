@@ -247,7 +247,7 @@ async function onFileSelected(e) {
   chatPending.value = true;
 
   try {
-    const token = await getToken();
+    const token = getToken();
     const formData = new FormData();
     formData.append("file", file);
 
@@ -264,17 +264,16 @@ async function onFileSelected(e) {
       addMessage(
         "assistant",
         `Failed to upload "${file.name}". Make sure you have admin access.`,
-        {
-          error: true,
-        },
+        { error: true },
       );
       return;
     }
 
-    addMessage(
-      "assistant",
-      `"${file.name}" is queued for processing. I'll extract the contract details in the background. You can ask me about it once it's done.`,
-    );
+    const { correlationId } = await res.json();
+    addMessage("assistant", `"${file.name}" is queued for processing…`);
+    chatPending.value = false;
+
+    pollContractStatus(correlationId, file.name, token);
   } catch {
     addMessage("assistant", "Upload failed — connection error.", {
       error: true,
@@ -282,6 +281,55 @@ async function onFileSelected(e) {
   } finally {
     chatPending.value = false;
   }
+}
+
+async function pollContractStatus(correlationId, fileName, token) {
+  const INTERVAL = 3000;
+  const MAX_ATTEMPTS = 40; // ~2 minutes
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, INTERVAL));
+
+    try {
+      const headers = {};
+      if (token) headers["X-Auth-Token"] = `Bearer ${token}`;
+      const res = await fetch(
+        `/api/check-status?correlationId=${correlationId}`,
+        { headers },
+      );
+      if (!res.ok) continue;
+
+      const { status, statusMessage, lastError } = await res.json();
+
+      if (
+        status === "completed" ||
+        status === "pending_review" ||
+        status === "approved"
+      ) {
+        addMessage(
+          "assistant",
+          `"${fileName}" has been processed and is ready. You can now ask me about it.`,
+        );
+        return;
+      }
+
+      if (status === "failed") {
+        addMessage(
+          "assistant",
+          `Processing "${fileName}" failed.${lastError ? ` Error: ${lastError}` : ""} You can try uploading it again.`,
+          { error: true },
+        );
+        return;
+      }
+    } catch {
+      // transient error — keep polling
+    }
+  }
+
+  addMessage(
+    "assistant",
+    `Processing "${fileName}" is taking longer than expected. It should still complete in the background.`,
+  );
 }
 </script>
 
