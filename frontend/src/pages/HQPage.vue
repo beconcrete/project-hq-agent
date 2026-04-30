@@ -218,9 +218,12 @@ async function sendMessage() {
     });
 
     if (!res.ok) {
-      addMessage("assistant", "Something went wrong. Please try again.", {
-        error: true,
-      });
+      const errText = await res.text().catch(() => "");
+      addMessage(
+        "assistant",
+        `Error ${res.status}: ${errText || "Something went wrong. Please try again."}`,
+        { error: true },
+      );
       return;
     }
 
