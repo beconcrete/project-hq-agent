@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace HqAgent.Api;
 
@@ -17,13 +18,15 @@ public class HqChat
     private readonly string _appId;
     private readonly string _agentBaseUrl;
     private readonly string _agentKey;
+    private readonly ILogger<HqChat> _logger;
 
-    public HqChat(IHttpClientFactory httpFactory, IConfiguration config)
+    public HqChat(IHttpClientFactory httpFactory, IConfiguration config, ILogger<HqChat> logger)
     {
         _httpFactory  = httpFactory;
         _appId        = config["APP_ID"]              ?? "hqagents";
         _agentBaseUrl = config["CHAT_AGENT_BASE_URL"] ?? "";
         _agentKey     = config["CHAT_AGENT_KEY"]      ?? "";
+        _logger       = logger;
     }
 
     [Function("HqChat")]
@@ -37,7 +40,10 @@ public class HqChat
         if (!guard.Allowed) return await Plain(req, HttpStatusCode.Forbidden, "Forbidden");
 
         if (string.IsNullOrEmpty(_agentBaseUrl))
+        {
+            _logger.LogError("CHAT_AGENT_BASE_URL is not configured");
             return await Plain(req, HttpStatusCode.ServiceUnavailable, "HQ agent not configured");
+        }
 
         var userId  = context.Items.TryGetValue("userId", out var uid) ? uid?.ToString() ?? "" : "";
         var isAdmin = guard.RoleIds.Contains(Roles.Admin);
@@ -54,6 +60,9 @@ public class HqChat
         var http = _httpFactory.CreateClient();
         using var agentResp  = await http.SendAsync(agentReq);
         var responseBody     = await agentResp.Content.ReadAsStringAsync();
+
+        if (!agentResp.IsSuccessStatusCode)
+            _logger.LogError("HQ agent returned {Status}: {Body}", (int)agentResp.StatusCode, responseBody);
 
         var res = req.CreateResponse();
         await res.WriteStringAsync(responseBody);
