@@ -49,7 +49,7 @@ public class ContractGraph
         {
             id    = "__root__",
             type  = "root",
-            label = "Be Concrete / Björn Eriksen",
+            label = "Be Concrete AB",
         });
 
         // Group contracts by effective party

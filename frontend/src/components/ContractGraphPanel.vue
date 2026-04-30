@@ -704,8 +704,70 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ── Accordion shell (mirrors ContractsPage.vue — scoped styles don't cross component boundary) ── */
 .accordion--graph {
   grid-column: 1 / -1;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #ddd7cd;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 1rem 1.05rem;
+  border: 0;
+  background: transparent;
+  color: #181511;
+  font: inherit;
+  cursor: pointer;
+}
+
+.accordion-label {
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.accordion-label svg {
+  color: #126b5f;
+  flex-shrink: 0;
+}
+
+.badge-count {
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: #f0ede6;
+  color: #746f67;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.chevron {
+  width: 1rem;
+  height: 1rem;
+  color: #9a9388;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.accordion--graph.open .chevron {
+  transform: rotate(180deg);
+}
+
+.accordion-panel {
+  display: none;
+  border-top: 1px solid #ddd7cd;
+}
+
+.accordion--graph.open .accordion-panel {
+  display: block;
 }
 
 .graph-panel-inner {
