@@ -84,7 +84,7 @@ public class ContractReprocess
             ProcessingHint: hint);
 
         // Reset the table record to "processing" before sending to the queue
-        await _table.WriteProcessingAsync(msg, "Reprocessing requested.", cancellationToken: context.CancellationToken);
+        await _table.WriteProcessingAsync(msg, "Reprocessing requested.", ct: context.CancellationToken);
 
         var queueClient = new QueueServiceClient(_storageConnectionString)
             .GetQueueClient("contract-processing");
