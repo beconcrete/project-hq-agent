@@ -111,6 +111,11 @@ public class ContractGraph
                     reviewState         = entity.ReviewState,
                     fileName            = entity.FileName,
                     manualPartyOverride = entity.ManualPartyOverride,
+                    paymentAmount       = entity.PaymentAmount,
+                    paymentCurrency     = entity.PaymentCurrency,
+                    paymentType         = entity.PaymentType,
+                    paymentUnit         = entity.PaymentUnit,
+                    riskFlags           = ParseJsonList(entity.RiskFlags),
                 });
 
                 edges.Add(new

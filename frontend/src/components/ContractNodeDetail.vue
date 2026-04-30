@@ -32,9 +32,9 @@
             <dt>Expires</dt>
             <dd>{{ node.data.expiryDate || "—" }}</dd>
           </div>
-          <div class="detail-row">
+          <div v-if="node.data.renewalStatus" class="detail-row">
             <dt>Renewal</dt>
-            <dd>{{ node.data.renewalStatus || "—" }}</dd>
+            <dd>{{ node.data.renewalStatus }}</dd>
           </div>
           <div class="detail-row">
             <dt>Review</dt>
@@ -43,11 +43,22 @@
                 class="review-chip"
                 :class="`review-chip--${node.data.reviewState}`"
               >
-                {{ node.data.reviewState || "—" }}
+                {{ formatReviewState(node.data.reviewState) }}
               </span>
             </dd>
           </div>
+          <div v-if="paymentSummary" class="detail-row">
+            <dt>Payment</dt>
+            <dd>{{ paymentSummary }}</dd>
+          </div>
         </dl>
+
+        <div v-if="riskFlags.length" class="detail-risks">
+          <p class="detail-section-label">Risk flags</p>
+          <ul class="detail-risk-list">
+            <li v-for="flag in riskFlags" :key="flag">{{ flag }}</li>
+          </ul>
+        </div>
 
         <div class="detail-actions">
           <button
@@ -119,7 +130,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import { useAuth } from "../composables/useAuth";
 
 const props = defineProps({
@@ -132,6 +143,43 @@ const auth = useAuth();
 const deleteConfirm = ref(false);
 const deleting = ref(false);
 const deleteError = ref("");
+
+const riskFlags = computed(() => {
+  const flags = props.node?.data?.riskFlags;
+  if (!flags || !Array.isArray(flags)) return [];
+  return flags;
+});
+
+const paymentSummary = computed(() => {
+  const d = props.node?.data;
+  if (!d) return null;
+  const parts = [];
+  if (d.paymentAmount != null) {
+    const formatted = Number(d.paymentAmount).toLocaleString("sv-SE");
+    const currency = d.paymentCurrency || "";
+    parts.push(currency ? `${formatted} ${currency}` : formatted);
+  }
+  if (d.paymentUnit) parts.push(d.paymentUnit);
+  if (d.paymentType) parts.push(d.paymentType);
+  return parts.length ? parts.join(" · ") : null;
+});
+
+const REVIEW_LABELS = {
+  approved: "Approved",
+  approved_by_extraction: "Approved by extraction",
+  pending_review: "Pending review",
+  rejected: "Rejected",
+  duplicate_deleted: "Duplicate",
+  failed: "Failed",
+};
+
+function formatReviewState(state) {
+  if (!state) return "—";
+  return (
+    REVIEW_LABELS[state] ??
+    state.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
 
 watch(
   () => props.node,
@@ -238,28 +286,53 @@ async function doDelete() {
 }
 
 .detail-row {
-  display: grid;
-  grid-template-columns: 5.5rem 1fr;
-  gap: 0.5rem;
-  align-items: baseline;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
 }
 
 .detail-row dt {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   color: #9a9388;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .detail-row dd {
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   color: #181511;
   margin: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
+  line-height: 1.35;
+}
+
+.detail-risks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f0ede6;
+}
+
+.detail-risk-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detail-risk-list li {
+  font-size: 0.78rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 5px;
+  padding: 0.2rem 0.5rem;
 }
 
 .detail-tag {
@@ -287,7 +360,19 @@ async function doDelete() {
   background: #fef3c7;
   color: #92400e;
 }
+.review-chip--approved_by_extraction {
+  background: #dcfce7;
+  color: #166534;
+}
 .review-chip--rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.review-chip--duplicate_deleted {
+  background: #f3f4f6;
+  color: #374151;
+}
+.review-chip--failed {
   background: #fee2e2;
   color: #991b1b;
 }
