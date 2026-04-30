@@ -65,7 +65,7 @@ public class ContractAssign
         var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new
         {
-            rowKey              = entity.PartitionKey,
+            rowKey              = entity.RowKey,
             manualPartyOverride = entity.ManualPartyOverride,
         });
         res.StatusCode = HttpStatusCode.OK;

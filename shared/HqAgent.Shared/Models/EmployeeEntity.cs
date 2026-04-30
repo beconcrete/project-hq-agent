@@ -3,11 +3,11 @@ using Azure.Data.Tables;
 
 namespace HqAgent.Shared.Models;
 
-// PartitionKey = "employees", RowKey = EmployeeId (GUID)
+// PartitionKey = "employees", RowKey = email (lowercase, normalised)
 public class EmployeeEntity : ITableEntity
 {
     public string PartitionKey { get; set; } = "employees";
-    public string RowKey { get; set; } = string.Empty; // EmployeeId (GUID)
+    public string RowKey { get; set; } = string.Empty; // email (lowercase)
     public DateTimeOffset? Timestamp { get; set; }
     public ETag ETag { get; set; }
 

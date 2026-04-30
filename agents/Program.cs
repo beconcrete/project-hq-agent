@@ -2,6 +2,7 @@ using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using HqAgent.Agents.Contract.Agents;
 using HqAgent.Agents.Contract.Services;
+using HqAgent.Agents.HQ.Agents;
 using HqAgent.Agents.HR.Agents;
 using HqAgent.Agents.HR.Services;
 using HqAgent.Agents.SalesForecast.Agents;
@@ -30,6 +31,9 @@ var host = new HostBuilder()
         services.AddSingleton<BlobStorageService>();
         services.AddSingleton<TableStorageService>();
         services.AddSingleton<HRTableStorageService>();
+        services.AddSingleton<CustomerStorageService>();
+        services.AddSingleton<ProjectStorageService>();
+        services.AddSingleton<TimereportStorageService>();
         services.AddSingleton<ForecastTableStorageService>();
         services.AddSingleton<DocumentTextExtractor>();
         services.AddSingleton<IContractIntelligence, ContractIntelligence>();
@@ -41,6 +45,7 @@ var host = new HostBuilder()
         services.AddSingleton<ContractChatAgent>();
         services.AddSingleton<HRChatAgent>();
         services.AddSingleton<SalesForecastChatAgent>();
+        services.AddSingleton<HqChatAgent>();
     })
     .Build();
 

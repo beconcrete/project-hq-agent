@@ -75,7 +75,7 @@ public class ReviewContract
         var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new
         {
-            correlationId = entity.PartitionKey,
+            correlationId = entity.RowKey,
             status = entity.Status,
             reviewState = entity.ReviewState,
             relationshipType = entity.RelationshipType,

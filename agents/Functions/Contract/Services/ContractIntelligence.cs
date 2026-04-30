@@ -177,7 +177,7 @@ public class ContractIntelligence : IContractIntelligence
                 x.StartDate,
                 x.EndDate,
                 ParseHourlyRateSek(x.Entity),
-                x.Entity.PartitionKey))
+                x.Entity.RowKey))
             .FirstOrDefault();
     }
 
@@ -211,17 +211,17 @@ public class ContractIntelligence : IContractIntelligence
         return new ContractAnswer("Visible contracts for this caller.", matches);
     }
 
-    private async Task<List<ContractExtractionEntity>> LoadVisibleEntitiesAsync(
+    private async Task<List<ContractEntity>> LoadVisibleEntitiesAsync(
         ContractCallerContext caller,
         CancellationToken ct) =>
         await _table.ListExtractionsAsync(caller.IsAdmin ? null : caller.UserId, ct);
 
-    private static bool CanAccess(ContractExtractionEntity entity, ContractCallerContext caller) =>
+    private static bool CanAccess(ContractEntity entity, ContractCallerContext caller) =>
         caller.IsAdmin || entity.UserId == caller.UserId;
 
-    private static ContractSummary ToSummary(ContractExtractionEntity e) =>
+    private static ContractSummary ToSummary(ContractEntity e) =>
         new(
-            e.PartitionKey,
+            e.RowKey,
             e.FileName,
             e.Status,
             e.DocumentType,
@@ -271,7 +271,7 @@ public class ContractIntelligence : IContractIntelligence
     private static bool ContainsAny(IEnumerable<string> values, string query) =>
         values.Any(value => value.Contains(query, StringComparison.OrdinalIgnoreCase));
 
-    private static bool MentionsConsultant(ContractExtractionEntity entity, string consultantName)
+    private static bool MentionsConsultant(ContractEntity entity, string consultantName)
     {
         var values = ParseJsonList(entity.PeopleMentioned);
         return ContainsAny(values, consultantName) ||
@@ -279,7 +279,7 @@ public class ContractIntelligence : IContractIntelligence
     }
 
     private static bool OverlapsMonth(
-        ContractExtractionEntity entity,
+        ContractEntity entity,
         DateOnly periodStart,
         DateOnly periodEnd)
     {
@@ -303,7 +303,7 @@ public class ContractIntelligence : IContractIntelligence
         return overlapEnd < overlapStart ? 0 : overlapEnd.DayNumber - overlapStart.DayNumber + 1;
     }
 
-    private static decimal? ParseHourlyRateSek(ContractExtractionEntity entity)
+    private static decimal? ParseHourlyRateSek(ContractEntity entity)
     {
         if (entity.PaymentAmount.HasValue &&
             string.Equals(entity.PaymentCurrency, "SEK", StringComparison.OrdinalIgnoreCase) &&
@@ -349,7 +349,7 @@ public class ContractIntelligence : IContractIntelligence
     private static DateTime? ToDateTime(DateOnly? date) =>
         date?.ToDateTime(TimeOnly.MinValue);
 
-    private static bool IsDeleted(ContractExtractionEntity entity) =>
+    private static bool IsDeleted(ContractEntity entity) =>
         entity.Status == "deleted" ||
         entity.ReviewState is "rejected" or "duplicate_deleted" ||
         entity.DeletedAt.HasValue;

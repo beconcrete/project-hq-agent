@@ -47,7 +47,7 @@ public record ContractSummary(
 public record ContractDetail(
     ContractSummary Summary,
     string ExtractedFieldsJson,
-    ContractExtractionEntity Entity);
+    ContractEntity Entity);
 
 public record ContractReference(
     string CorrelationId,

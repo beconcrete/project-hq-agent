@@ -31,14 +31,15 @@ public class HRTableStorageService
         return results.OrderBy(e => e.FullName).ToList();
     }
 
-    public async Task<EmployeeEntity?> GetEmployeeAsync(string employeeId, CancellationToken ct = default)
+    public async Task<EmployeeEntity?> GetEmployeeAsync(string email, CancellationToken ct = default)
     {
         var table = _client.GetTableClient(TableNames.Employees);
         await table.CreateIfNotExistsAsync(ct);
 
         try
         {
-            var response = await table.GetEntityAsync<EmployeeEntity>("employees", employeeId, cancellationToken: ct);
+            var response = await table.GetEntityAsync<EmployeeEntity>(
+                "employees", email.ToLowerInvariant(), cancellationToken: ct);
             return response.Value;
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
@@ -53,11 +54,10 @@ public class HRTableStorageService
         await table.CreateIfNotExistsAsync(ct);
 
         entity.PartitionKey = "employees";
-        if (string.IsNullOrWhiteSpace(entity.RowKey))
-            entity.RowKey = Guid.NewGuid().ToString();
+        entity.RowKey       = entity.Email.ToLowerInvariant();
 
         await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
-        _logger.LogInformation("Wrote employee {EmployeeId} ({FullName}), status={Status}", entity.RowKey, entity.FullName, entity.Status);
+        _logger.LogInformation("Wrote employee {Email} ({FullName}), status={Status}", entity.RowKey, entity.FullName, entity.Status);
     }
 
     // Always reads fresh — never cached. Callers must not cache the return value.

@@ -29,6 +29,23 @@
 
     <nav class="sidebar-nav" aria-label="Main navigation">
       <ul class="nav-list">
+        <li class="nav-item" :class="{ active: $route.path === '/hq' }">
+          <router-link to="/hq" class="nav-link" @click="sidebar.closeMobile()">
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            <span class="nav-label">HQ</span>
+          </router-link>
+        </li>
         <li class="nav-item" :class="{ active: $route.path === '/contracts' }">
           <router-link
             to="/contracts"

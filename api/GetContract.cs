@@ -74,7 +74,7 @@ public class GetContract
         var okRes = req.CreateResponse();
         await okRes.WriteAsJsonAsync(new
         {
-            correlationId  = entity.PartitionKey,
+            correlationId  = entity.RowKey,
             fileName       = entity.FileName,
             uploadedAt     = entity.UploadedAt,
             processedAt    = entity.ProcessedAt,
@@ -201,7 +201,7 @@ public class GetContract
         int Score,
         IReadOnlyList<string> Reasons);
 
-    private static string NormalizeReviewState(HqAgent.Shared.Models.ContractExtractionEntity entity)
+    private static string NormalizeReviewState(HqAgent.Shared.Models.ContractEntity entity)
     {
         if (!string.IsNullOrWhiteSpace(entity.ReviewState))
             return entity.ReviewState;

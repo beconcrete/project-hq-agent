@@ -35,15 +35,31 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 
 | Namespace | Contents |
 |---|---|
-| `HqAgent.Shared.Models` | `ContractMessage` (queue message), `ExtractionResult` (open-ended), `ContractExtractionEntity` (Table entity), normalized contract fact helpers |
-| `HqAgent.Shared.Storage` | `BlobStorageService` (download blobs), `TableStorageService` (write/read `Contracts`) |
+| `HqAgent.Shared.Models` | `ContractMessage` (queue message), `ExtractionResult` (open-ended), `ContractEntity` (Table entity), `EmployeeEntity`, `CustomerEntity`, `ProjectEntity`, `TimereportEntity`, `HqChatTurnEntity`, normalized contract fact helpers |
+| `HqAgent.Shared.Storage` | `BlobStorageService` (download blobs), `TableStorageService` (write/read `Contracts`), `HRTableStorageService`, `CustomerStorageService`, `ProjectStorageService`, `TimereportStorageService` |
+
+### Domain entity key strategy (locked)
+
+| Entity | Table | PartitionKey | RowKey |
+|---|---|---|---|
+| Contract | `Contracts` | `"contracts"` | contractId (GUID — same value as the old correlationId) |
+| Employee | `Employees` | `"employees"` | email (lowercase) |
+| Customer | `Customers` | `"customers"` | customerId (GUID) |
+| Project | `Projects` | `"projects"` | projectId (GUID) |
+| Timereport | `Timereports` | employeeEmail (lowercase) | `{date:yyyyMMdd}_{projectId}_{ticks:D20}` |
+| HQChatHistory | `HQChatHistory` | userId | `{sessionId}_{ticks:D20}` |
+
+**Entity relationships:**
+- `Project` → `Customer` via `CustomerId`; team stored as `EmployeeEmails` (JSON array of lowercase emails)
+- `Timereport` → `Project` (ProjectId) + `Customer` (CustomerId, denormalised) + `Employee` (PartitionKey = email)
+- Multiple timereport entries per employee+project+day are allowed — the ticks suffix makes each row unique
 
 ### Rules
 
 - **Never duplicate** `BlobStorageService`, `TableStorageService`, `ExtractionResult`, or `ContractMessage` in any project — always reference shared.
 - `ExtractionResult` uses an open `Dictionary<string, JsonElement>` for extracted fields — no fixed schema. The model decides what fields are relevant.
 - `Contracts` stores both the full open extraction JSON and normalized query fields such as expiry date, notice deadline, counterparties, people, renewal status, assignment dates, payment facts, review state, and risk flags.
-- `TableStorageService.WriteExtractionAsync` automatically sets `status = "pending_review"` and `ReviewState = "pending_review"` when `ExtractionResult.PendingReview = true`.
+- `TableStorageService.WriteExtractionAsync` writes `PartitionKey = "contracts"`, `RowKey = message.CorrelationId`. It automatically sets `status = "pending_review"` and `ReviewState = "pending_review"` when `ExtractionResult.PendingReview = true`.
 
 ### CI/CD — shared triggers all three pipelines
 
@@ -187,13 +203,26 @@ See [docs/MAF.md](./docs/MAF.md) for patterns, gotchas, and working examples cov
 - Tools: `[Description]` attribute + `AIFunctionFactory.Create(method)`
 - What to persist vs skip in `StoreChatHistoryAsync` (never persist tool call/result pairs)
 
-### Current Contract agent shape
+### Agent shape
 
-- `ContractOrchestratorAgent` uses MAF for queue-triggered ingestion: triage → extraction.
-- `ContractChatAgent` intentionally uses a direct OpenAI tool-calling loop for interactive chat, but its tools delegate to `IContractIntelligence` instead of owning storage queries directly.
-- `IContractIntelligence` is the internal capability layer future agents should call for contract questions such as expiring contracts, renewal windows, people/person impact, counterparty lookup, and document fallback.
-- `DocumentTextExtractor` is shared by ingestion and chat document fallback. It extracts PDF text through OpenAI file input and DOCX text locally from `word/document.xml`.
-- See [docs/contract-capabilities.md](./docs/contract-capabilities.md) for the durable fact model, review states, and cross-domain capability pattern.
+**Primary user-facing agent: `HqChatAgent`** (`agents/Functions/HQ/Agents/HqChatAgent.cs`)
+- Direct OpenAI tool-calling loop (same pattern as `ContractChatAgent`) — not MAF.
+- Tool registry spanning all domains: Contracts, Employees, Customers, Projects, Timereports.
+- Conversational time reporting: `log_time` saves an entry and prompts for a note; `update_timereport_note` patches it on the next turn using the returned `rowKey`.
+- Chat history in `HQChatHistory`: `PartitionKey = userId`, `RowKey = {sessionId}_{ticks:D20}`.
+- Exposed via `HqChatFunction` HTTP trigger at `POST /api/hq-chat` (function auth, called by `api/HqChat.cs` proxy).
+
+**Ingestion: `ContractOrchestratorAgent`** — MAF, queue-triggered (contract-processing queue). Triage → extraction → writes `ContractEntity` to `Contracts` table.
+
+**Legacy domain agents** (remain in codebase, not the primary UI surface):
+- `ContractChatAgent` — direct OpenAI loop, tools delegate to `IContractIntelligence`.
+- `HRChatAgent`, `SalesForecastChatAgent` — domain-specific agents, still functional.
+
+**`IContractIntelligence`** — capability layer injected into both `ContractChatAgent` and `HqChatAgent` for contract queries.
+
+**`DocumentTextExtractor`** — shared by ingestion and chat fallback. Extracts PDF via OpenAI file input, DOCX locally from `word/document.xml`.
+
+- See [docs/contract-capabilities.md](./docs/contract-capabilities.md) for the durable fact model and review states.
 - See [docs/contracts-eval.md](./docs/contracts-eval.md) for the manual ingestion/chat evaluation checklist.
 - See [docs/operations.md](./docs/operations.md) for production health checks, Application Insights queries, and safe maintenance scripts.
 

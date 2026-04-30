@@ -62,7 +62,7 @@ public class GetContractDownloadUrl
         var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new
         {
-            correlationId = entity.PartitionKey,
+            correlationId = entity.RowKey,
             fileName = entity.FileName,
             url = url.ToString(),
             expiresAt = DateTimeOffset.UtcNow.Add(LinkTtl),

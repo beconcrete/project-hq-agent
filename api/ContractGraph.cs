@@ -53,7 +53,7 @@ public class ContractGraph
         });
 
         // Group contracts by effective party
-        var partyContracts = new Dictionary<string, List<HqAgent.Shared.Models.ContractExtractionEntity>>(StringComparer.Ordinal);
+        var partyContracts = new Dictionary<string, List<HqAgent.Shared.Models.ContractEntity>>(StringComparer.Ordinal);
         foreach (var entity in entities)
         {
             var party = EffectiveParty(entity);
@@ -94,14 +94,14 @@ public class ContractGraph
 
             foreach (var entity in contracts)
             {
-                var contractId = $"contract:{entity.PartitionKey}";
+                var contractId = $"contract:{entity.RowKey}";
                 nodes.Add(new
                 {
                     id                  = contractId,
                     type                = "contract",
                     label               = ContractLabel(entity),
                     partyId             = partyId,
-                    rowKey              = entity.PartitionKey,
+                    rowKey              = entity.RowKey,
                     documentType        = entity.DocumentType,
                     counterparty        = entity.PrimaryCounterparty,
                     expiryDate          = entity.ExpiryDate.HasValue
@@ -143,7 +143,7 @@ public class ContractGraph
     private static bool IsOwnEntity(string name) =>
         !string.IsNullOrWhiteSpace(name) && OwnNames.Contains(name.Trim());
 
-    private static string EffectiveParty(HqAgent.Shared.Models.ContractExtractionEntity entity)
+    private static string EffectiveParty(HqAgent.Shared.Models.ContractEntity entity)
     {
         if (!string.IsNullOrWhiteSpace(entity.ManualPartyOverride))
             return entity.ManualPartyOverride;
@@ -161,7 +161,7 @@ public class ContractGraph
         return others.Count > 0 ? others[0] : "__unknown__";
     }
 
-    private static string ContractLabel(HqAgent.Shared.Models.ContractExtractionEntity entity)
+    private static string ContractLabel(HqAgent.Shared.Models.ContractEntity entity)
     {
         if (!string.IsNullOrWhiteSpace(entity.DocumentType))
             return entity.DocumentType;
@@ -170,7 +170,7 @@ public class ContractGraph
         return "Contract";
     }
 
-    private static string? RenewalStatus(HqAgent.Shared.Models.ContractExtractionEntity entity) =>
+    private static string? RenewalStatus(HqAgent.Shared.Models.ContractEntity entity) =>
         entity.AutoRenewal switch
         {
             true  => "Auto-renews",

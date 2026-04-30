@@ -44,7 +44,7 @@ public class ListContracts
 
         var items = entities.Select(e => new
         {
-            correlationId = e.PartitionKey,
+            correlationId = e.RowKey,
             fileName      = e.FileName,
             uploadedAt    = e.UploadedAt,
             status        = e.Status,
@@ -132,7 +132,7 @@ public class ListContracts
         int Score,
         IReadOnlyList<string> Reasons);
 
-    private static string NormalizeReviewState(HqAgent.Shared.Models.ContractExtractionEntity entity)
+    private static string NormalizeReviewState(HqAgent.Shared.Models.ContractEntity entity)
     {
         if (!string.IsNullOrWhiteSpace(entity.ReviewState))
             return entity.ReviewState;
