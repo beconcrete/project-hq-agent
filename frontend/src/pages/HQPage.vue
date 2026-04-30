@@ -186,12 +186,8 @@ function clearChat() {
   chatInput.value = "";
 }
 
-async function getToken() {
-  try {
-    return await auth.getIdToken();
-  } catch {
-    return null;
-  }
+function getToken() {
+  return auth.getToken();
 }
 
 async function sendMessage() {
