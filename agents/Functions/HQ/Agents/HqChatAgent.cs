@@ -26,9 +26,14 @@ public class HqChatAgent
 
         EMPLOYEES: Use employee tools to list employees, get details by email, or find who works on a project.
 
-        CUSTOMERS: Use customer tools to list customers or look up a specific customer by name or ID.
+        CUSTOMERS: Use customer tools to list customers, look up a specific customer, or create a new customer.
+        When creating a customer only the name is required; ask for optional fields if you have them.
 
-        PROJECTS: Use project tools to list projects, get project details, find projects by customer or employee.
+        PROJECTS: Use project tools to list projects, get project details, find projects by customer or employee,
+        or create a new project. To create a project you need a name and a customer — resolve the customer by
+        name first if the user gives a customer name instead of an ID.
+
+        EMPLOYEES: When creating an employee, email and full name are required; other fields are optional.
         Resolve project names to IDs using list_projects before calling any project-specific tool.
 
         TIME REPORTING — conversational flow:
@@ -77,6 +82,9 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("get_employee",
             "Get details for a specific employee by email address.",
             BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
+        ChatTool.CreateFunctionTool("create_employee",
+            "Create or update an employee record. Email and fullName are required.",
+            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"},"fullName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"}},"required":["email","fullName"]}""")),
         ChatTool.CreateFunctionTool("find_employees_by_project",
             "Find employees assigned to a specific project by project ID.",
             BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"}},"required":["projectId"]}""")),
@@ -88,6 +96,9 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("get_customer",
             "Get details for a customer by ID or name.",
             BinaryData.FromString("""{"type":"object","properties":{"customerIdOrName":{"type":"string"}},"required":["customerIdOrName"]}""")),
+        ChatTool.CreateFunctionTool("create_customer",
+            "Create a new customer. Only name is required.",
+            BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"orgNumber":{"type":"string"},"country":{"type":"string"},"primaryContactName":{"type":"string"},"primaryContactEmail":{"type":"string"},"notes":{"type":"string"}},"required":["name"]}""")),
 
         // Projects
         ChatTool.CreateFunctionTool("list_projects",
@@ -102,6 +113,9 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("list_projects_by_employee",
             "List all projects an employee is assigned to, by email.",
             BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
+        ChatTool.CreateFunctionTool("create_project",
+            "Create a new project. Name and customerId are required. Resolve the customer by name first if needed.",
+            BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"customerId":{"type":"string"},"customerName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"description":{"type":"string"},"employeeEmails":{"type":"array","items":{"type":"string"}}},"required":["name","customerId"]}""")),
 
         // Timereports
         ChatTool.CreateFunctionTool("log_time",
@@ -219,16 +233,19 @@ public class HqChatAgent
             "list_employees"            => await ListEmployeesAsync(call, ct),
             "get_employee"              => await GetEmployeeAsync(call, ct),
             "find_employees_by_project" => await FindEmployeesByProjectAsync(call, ct),
+            "create_employee"           => await CreateEmployeeAsync(call, ct),
 
             // Customers
             "list_customers"            => await ListCustomersAsync(call, ct),
             "get_customer"              => await GetCustomerAsync(call, ct),
+            "create_customer"           => await CreateCustomerAsync(call, ct),
 
             // Projects
             "list_projects"             => await ListProjectsAsync(call, ct),
             "get_project"               => await GetProjectAsync(call, ct),
             "list_projects_by_customer" => await ListProjectsByCustomerAsync(call, ct),
             "list_projects_by_employee" => await ListProjectsByEmployeeAsync(call, ct),
+            "create_project"            => await CreateProjectAsync(call, ct),
 
             // Timereports
             "log_time"               => await LogTimeAsync(call, userId, ct),
@@ -349,6 +366,32 @@ public class HqChatAgent
         return Serialize(employees);
     }
 
+    private async Task<string> CreateEmployeeAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var email    = ParseStr(call, "email");
+        var fullName = ParseStr(call, "fullName");
+        if (string.IsNullOrWhiteSpace(email))    return "Missing email";
+        if (string.IsNullOrWhiteSpace(fullName)) return "Missing fullName";
+
+        var entity = new EmployeeEntity
+        {
+            Email           = email.ToLowerInvariant(),
+            FullName        = fullName,
+            Status          = "active",
+            BaseSalary      = ParseDouble(call, "baseSalary")      ?? 0,
+            BillingBaseRate = ParseDouble(call, "billingBaseRate") ?? 0,
+            SeniorityLevel  = ParseStr(call, "seniorityLevel")     ?? "",
+            StartDate       = DateTimeOffset.UtcNow,
+        };
+
+        var startStr = ParseStr(call, "startDate");
+        if (startStr is not null && DateOnly.TryParse(startStr, out var start))
+            entity.StartDate = new DateTimeOffset(start.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+        await _hrStorage.WriteEmployeeAsync(entity, ct);
+        return Serialize(new { created = true, email = entity.Email, fullName = entity.FullName });
+    }
+
     // ── Customer tools ────────────────────────────────────────────────────────
 
     private async Task<string> ListCustomersAsync(ChatToolCall call, CancellationToken ct)
@@ -367,6 +410,26 @@ public class HqChatAgent
             ?? await _customerStorage.FindByNameAsync(idOrName, ct);
         if (customer is null) return "Customer not found";
         return Serialize(customer);
+    }
+
+    private async Task<string> CreateCustomerAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var name = ParseStr(call, "name");
+        if (string.IsNullOrWhiteSpace(name)) return "Missing name";
+
+        var entity = new CustomerEntity
+        {
+            Name                = name,
+            OrgNumber           = ParseStr(call, "orgNumber")           ?? "",
+            Country             = ParseStr(call, "country")             ?? "",
+            PrimaryContactName  = ParseStr(call, "primaryContactName")  ?? "",
+            PrimaryContactEmail = ParseStr(call, "primaryContactEmail") ?? "",
+            Notes               = ParseStr(call, "notes")               ?? "",
+            Status              = "active",
+        };
+
+        await _customerStorage.WriteCustomerAsync(entity, ct);
+        return Serialize(new { created = true, customerId = entity.RowKey, name = entity.Name });
     }
 
     // ── Project tools ─────────────────────────────────────────────────────────
@@ -422,6 +485,45 @@ public class HqChatAgent
         if (email is null) return "Missing email";
         var projects = await _projectStorage.ListByEmployeeAsync(email, ct);
         return Serialize(projects.Select(p => new { projectId = p.RowKey, p.Name, p.Status }));
+    }
+
+    private async Task<string> CreateProjectAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var name       = ParseStr(call, "name");
+        var customerId = ParseStr(call, "customerId");
+        if (string.IsNullOrWhiteSpace(name))       return "Missing name";
+        if (string.IsNullOrWhiteSpace(customerId)) return "Missing customerId";
+
+        var emails = new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(call.FunctionArguments);
+            if (doc.RootElement.TryGetProperty("employeeEmails", out var arr))
+                emails = arr.EnumerateArray().Select(e => e.GetString() ?? "")
+                            .Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+        }
+        catch { }
+
+        var entity = new ProjectEntity
+        {
+            Name           = name,
+            CustomerId     = customerId,
+            CustomerName   = ParseStr(call, "customerName") ?? "",
+            Status         = "active",
+            Description    = ParseStr(call, "description")  ?? "",
+            EmployeeEmails = JsonSerializer.Serialize(emails),
+        };
+
+        var startStr = ParseStr(call, "startDate");
+        if (startStr is not null && DateOnly.TryParse(startStr, out var start))
+            entity.StartDate = start.ToDateTime(TimeOnly.MinValue);
+
+        var endStr = ParseStr(call, "endDate");
+        if (endStr is not null && DateOnly.TryParse(endStr, out var end))
+            entity.EndDate = end.ToDateTime(TimeOnly.MinValue);
+
+        await _projectStorage.WriteProjectAsync(entity, ct);
+        return Serialize(new { created = true, projectId = entity.RowKey, name = entity.Name, customerId });
     }
 
     // ── Timereport tools ──────────────────────────────────────────────────────
