@@ -190,6 +190,18 @@ It reads `X-Auth-Token`, calls Be Concrete ID, and blocks with 403 if the user i
 
 `AUTH0_DOMAIN` and `AUTH0_CLIENT_ID` are **GitHub secrets only**. The deploy workflow passes them as `VITE_AUTH0_DOMAIN` and `VITE_AUTH0_CLIENT_ID` environment variables during `npm run build` — Vite bakes them into the bundle at build time. They are not needed as Azure SWA application settings and must not be added there.
 
+### Frontend token usage
+
+The `useAuth` composable exposes one method for getting the token: `auth.getToken()` — a synchronous getter that returns the cached `_idToken` string.
+
+**There is no `getIdToken()` method.** Calling it silently returns `undefined`, the `X-Auth-Token` header is never set, and the middleware returns 401. Every page that calls an API must use:
+
+```js
+const headers = { "Content-Type": "application/json" };
+const token = auth.getToken();
+if (token) headers["X-Auth-Token"] = `Bearer ${token}`;
+```
+
 ### CSP
 
 The `staticwebapp.config.json` CSP includes `worker-src blob:` to allow Auth0's SDK to spawn its token-cache web worker.
