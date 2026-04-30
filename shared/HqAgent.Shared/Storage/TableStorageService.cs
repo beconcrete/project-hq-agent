@@ -281,6 +281,50 @@ public class TableStorageService
         return entity;
     }
 
+    public async Task<ContractExtractionEntity?> UpdatePartyOverrideAsync(
+        string            correlationId,
+        string            party,
+        CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Contracts);
+        ContractExtractionEntity entity;
+        try
+        {
+            entity = (await table.GetEntityAsync<ContractExtractionEntity>(
+                correlationId, "extraction", cancellationToken: ct)).Value;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+
+        entity.ManualPartyOverride = party;
+        await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
+
+        _logger.LogInformation(
+            "Updated party override — correlationId:{CorrelationId} party:{Party}",
+            correlationId, party);
+
+        return entity;
+    }
+
+    public async Task<bool> HardDeleteContractAsync(
+        string            correlationId,
+        CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Contracts);
+        try
+        {
+            await table.DeleteEntityAsync(correlationId, "extraction", cancellationToken: ct);
+            _logger.LogInformation("Hard-deleted contract — correlationId:{CorrelationId}", correlationId);
+            return true;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return false;
+        }
+    }
+
     private static bool IsDeleted(ContractExtractionEntity entity) =>
         entity.Status == "deleted" ||
         entity.ReviewState is "rejected" or "duplicate_deleted" ||

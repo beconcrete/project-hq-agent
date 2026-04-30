@@ -64,4 +64,7 @@ public class ContractExtractionEntity : ITableEntity
     public DateTime? DeletedAt           { get; set; }
     public string    DeletedBy           { get; set; } = string.Empty;
     public string    DeleteReason        { get; set; } = string.Empty;
+
+    /// <summary>User-assigned party name that overrides the extracted PrimaryCounterparty.</summary>
+    public string    ManualPartyOverride { get; set; } = string.Empty;
 }

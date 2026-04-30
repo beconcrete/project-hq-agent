@@ -31,6 +31,16 @@ public class BlobStorageService
         return (bytes, ct_);
     }
 
+    public async Task DeleteAsync(
+        string            containerName,
+        string            blobName,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("Deleting blob {Container}/{Blob}", containerName, blobName);
+        var blob = _client.GetBlobContainerClient(containerName).GetBlobClient(blobName);
+        await blob.DeleteIfExistsAsync(cancellationToken: ct);
+    }
+
     public Uri CreateReadSasUri(
         string containerName,
         string blobName,

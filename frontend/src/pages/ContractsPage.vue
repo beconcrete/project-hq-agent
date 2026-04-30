@@ -54,7 +54,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path d="M14 3h7v7" />
             <path d="M10 14 21 3" />
-            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+            <path
+              d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"
+            />
           </svg>
         </button>
         <button
@@ -514,6 +516,11 @@
       <aside class="workspace-right" aria-hidden="true">
         <div v-if="detailData">{{ flatFields(detailData.fields) }}</div>
       </aside>
+
+      <ContractGraphPanel
+        ref="graphPanelRef"
+        @contract-deleted="onGraphContractDeleted"
+      />
     </div>
   </section>
 </template>
@@ -521,6 +528,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useAuth } from "../composables/useAuth";
+import ContractGraphPanel from "../components/ContractGraphPanel.vue";
 
 const auth = useAuth();
 
@@ -540,6 +548,7 @@ const reviewPending = ref("");
 
 const contractsOpen = ref(false);
 const uploadOpen = ref(false);
+const graphPanelRef = ref(null);
 
 const sessionId = ref(crypto.randomUUID());
 const chatMessages = ref([]);
@@ -618,6 +627,10 @@ async function loadContracts() {
   } finally {
     listLoading.value = false;
   }
+}
+
+async function onGraphContractDeleted() {
+  await loadContracts();
 }
 
 function startPolling(correlationId) {
