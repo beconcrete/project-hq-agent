@@ -2,6 +2,7 @@ using Azure.Data.Tables;
 using Azure.Storage.Blobs;
 using HqAgent.Api.Middleware;
 using HqAgent.Shared.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,9 @@ var host = new HostBuilder()
         services.AddSingleton(new BlobServiceClient(connStr));
         services.AddScoped<TableStorageService>();
         services.AddScoped<BlobStorageService>();
+        services.AddScoped<CustomerStorageService>();
+        services.AddScoped<ProjectStorageService>();
+        services.AddScoped<HRTableStorageService>();
     })
     .Build();
 

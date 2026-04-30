@@ -46,6 +46,31 @@
             <span class="nav-label">HQ</span>
           </router-link>
         </li>
+        <li
+          v-if="auth.hasRole('admin')"
+          class="nav-item"
+          :class="{ active: $route.path === '/graph' }"
+        >
+          <router-link
+            to="/graph"
+            class="nav-link"
+            @click="sidebar.closeMobile()"
+          >
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="5" cy="19" r="2" />
+              <circle cx="19" cy="19" r="2" />
+              <path d="M12 7v4M12 11 7 17M12 11l5 6" />
+            </svg>
+            <span class="nav-label">Graph</span>
+          </router-link>
+        </li>
         <li class="nav-item" :class="{ active: $route.path === '/contracts' }">
           <router-link
             to="/contracts"
