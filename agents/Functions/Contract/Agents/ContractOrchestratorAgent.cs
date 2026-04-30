@@ -107,7 +107,10 @@ public class ContractOrchestratorAgent
         _apiKey = config["OPENAI_API_KEY"]
             ?? throw new InvalidOperationException("OPENAI_API_KEY is not configured");
 
-        var openAiClient = new OpenAIClient(_apiKey);
+        var openAiClient = new OpenAIClient(_apiKey, new OpenAIClientOptions
+        {
+            NetworkTimeout = TimeSpan.FromMinutes(5),
+        });
         _triageChatClient     = openAiClient.GetChatClient(TriageModel).AsIChatClient();
         _extractionChatClient = openAiClient.GetChatClient(ExtractionModel).AsIChatClient();
     }
