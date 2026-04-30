@@ -83,6 +83,29 @@ public class TableStorageService
             message.CorrelationId, extraction.DocumentType, entity.Status);
     }
 
+    public async Task UpdateLinkedCustomersAsync(
+        string              contractId,
+        IEnumerable<string> customerIds,
+        IEnumerable<string> customerNames,
+        CancellationToken   ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Contracts);
+        try
+        {
+            var entity = (await table.GetEntityAsync<ContractEntity>(
+                "contracts", contractId, cancellationToken: ct)).Value;
+            entity.LinkedCustomerIds   = JsonSerializer.Serialize(customerIds.ToList());
+            entity.LinkedCustomerNames = JsonSerializer.Serialize(customerNames.ToList());
+            await table.UpsertEntityAsync(entity, TableUpdateMode.Replace, ct);
+            _logger.LogInformation("Updated LinkedCustomerIds on contract {ContractId}: {Ids}",
+                contractId, entity.LinkedCustomerIds);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            _logger.LogWarning("Contract {ContractId} not found when updating linked customers", contractId);
+        }
+    }
+
     public async Task WriteProcessingAsync(
         ContractMessage   message,
         string            statusMessage,

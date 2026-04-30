@@ -42,7 +42,9 @@ public record ContractSummary(
     string DuplicateOfCorrelationId,
     string SupersedesCorrelationId,
     IReadOnlyList<string> RelatedContractIds,
-    IReadOnlyList<string> RelationshipReasons);
+    IReadOnlyList<string> RelationshipReasons,
+    IReadOnlyList<string> LinkedCustomerIds,
+    IReadOnlyList<string> LinkedCustomerNames);
 
 public record ContractDetail(
     ContractSummary Summary,

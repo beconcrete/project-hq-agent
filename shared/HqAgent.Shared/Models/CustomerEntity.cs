@@ -18,4 +18,7 @@ public class CustomerEntity : ITableEntity
     public string PrimaryContactEmail { get; set; } = string.Empty;
     public string Status { get; set; } = "active"; // "active" | "inactive"
     public string Notes { get; set; } = string.Empty;
+
+    // JSON array of contract GUIDs — appended during contract ingestion
+    public string LinkedContractIds { get; set; } = "[]";
 }

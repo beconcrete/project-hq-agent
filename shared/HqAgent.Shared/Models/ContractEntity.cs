@@ -61,4 +61,8 @@ public class ContractEntity : ITableEntity
     public string DeletedBy { get; set; } = string.Empty;
     public string DeleteReason { get; set; } = string.Empty;
     public string ManualPartyOverride { get; set; } = string.Empty;
+
+    // JSON arrays — populated by customer-linking step during ingestion
+    public string LinkedCustomerIds   { get; set; } = "[]";
+    public string LinkedCustomerNames { get; set; } = "[]";
 }

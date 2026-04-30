@@ -251,7 +251,9 @@ public class ContractIntelligence : IContractIntelligence
             e.DuplicateOfCorrelationId,
             e.SupersedesCorrelationId,
             ParseJsonList(e.RelatedContractIds),
-            ParseJsonList(e.RelationshipReasons));
+            ParseJsonList(e.RelationshipReasons),
+            ParseJsonList(e.LinkedCustomerIds),
+            ParseJsonList(e.LinkedCustomerNames));
 
     private static IReadOnlyList<string> ParseJsonList(string json)
     {

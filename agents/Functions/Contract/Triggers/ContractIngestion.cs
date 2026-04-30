@@ -10,16 +10,19 @@ public class ContractIngestion
 {
     private readonly ContractOrchestratorAgent _agent;
     private readonly TableStorageService       _table;
+    private readonly CustomerStorageService    _customers;
     private readonly ILogger<ContractIngestion> _logger;
 
     public ContractIngestion(
         ContractOrchestratorAgent  agent,
         TableStorageService        table,
+        CustomerStorageService     customers,
         ILogger<ContractIngestion> logger)
     {
-        _agent  = agent;
-        _table  = table;
-        _logger = logger;
+        _agent     = agent;
+        _table     = table;
+        _customers = customers;
+        _logger    = logger;
     }
 
     [Function(nameof(ContractIngestion))]
@@ -56,10 +59,50 @@ public class ContractIngestion
         }
 
         await _table.WriteExtractionAsync(msg, extraction, context.CancellationToken);
+        await LinkCustomersAsync(msg.CorrelationId, extraction, context.CancellationToken);
 
         _logger.LogInformation(
             "Contract {CorrelationId} stored — type:{DocumentType} pendingReview:{Pending} model:{Model}",
             msg.CorrelationId, extraction.DocumentType, extraction.PendingReview, extraction.ModelUsed);
+    }
+
+    private async Task LinkCustomersAsync(
+        string contractId, ExtractionResult extraction, CancellationToken ct)
+    {
+        try
+        {
+            var facts        = ContractFactsExtractor.Extract(extraction);
+            var counterparties = facts.CounterpartyNames
+                .Append(facts.PrimaryCounterparty)
+                .Append(facts.CustomerName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            var matched = await _customers.MatchByCounterpartiesAsync(counterparties, ct);
+            if (matched.Count == 0)
+            {
+                _logger.LogInformation("No customer matches found for contract {ContractId}", contractId);
+                return;
+            }
+
+            await _table.UpdateLinkedCustomersAsync(
+                contractId,
+                matched.Select(c => c.RowKey),
+                matched.Select(c => c.Name),
+                ct);
+
+            foreach (var customer in matched)
+                await _customers.LinkContractAsync(customer.RowKey, contractId, ct);
+
+            _logger.LogInformation(
+                "Linked contract {ContractId} to customers: {Names}",
+                contractId, string.Join(", ", matched.Select(c => c.Name)));
+        }
+        catch (Exception ex)
+        {
+            // Customer linking is best-effort — never fail ingestion over it
+            _logger.LogWarning(ex, "Customer linking failed for contract {ContractId}", contractId);
+        }
     }
 
     private static int GetRetryCount(FunctionContext context)

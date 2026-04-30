@@ -302,10 +302,15 @@ public class HqChatAgent
         if (id is null) return "Missing contractId";
         var detail = await _contracts.GetContractAsync(id, caller, ct);
         if (detail is null) return "Contract not found";
-        return Serialize(new { detail.Summary,
+        return Serialize(new
+        {
+            detail.Summary,
+            linkedCustomerIds   = TryDeserializeStringArray(detail.Entity.LinkedCustomerIds),
+            linkedCustomerNames = TryDeserializeStringArray(detail.Entity.LinkedCustomerNames),
             extracted = string.IsNullOrEmpty(detail.ExtractedFieldsJson)
                 ? (JsonElement?)null
-                : JsonSerializer.Deserialize<JsonElement>(detail.ExtractedFieldsJson) });
+                : JsonSerializer.Deserialize<JsonElement>(detail.ExtractedFieldsJson),
+        });
     }
 
     // ── Employee tools ────────────────────────────────────────────────────────
@@ -398,7 +403,13 @@ public class HqChatAgent
     {
         var includeInactive = ParseBool(call, "includeInactive") ?? false;
         var customers = await _customerStorage.ListCustomersAsync(includeInactive, ct);
-        return Serialize(customers);
+        return Serialize(customers.Select(c => new
+        {
+            customerId        = c.RowKey,
+            c.Name,
+            c.Status,
+            linkedContractIds = TryDeserializeStringArray(c.LinkedContractIds),
+        }));
     }
 
     private async Task<string> GetCustomerAsync(ChatToolCall call, CancellationToken ct)
@@ -409,7 +420,18 @@ public class HqChatAgent
         var customer = await _customerStorage.GetCustomerAsync(idOrName, ct)
             ?? await _customerStorage.FindByNameAsync(idOrName, ct);
         if (customer is null) return "Customer not found";
-        return Serialize(customer);
+        return Serialize(new
+        {
+            customerId          = customer.RowKey,
+            customer.Name,
+            customer.OrgNumber,
+            customer.Country,
+            customer.PrimaryContactName,
+            customer.PrimaryContactEmail,
+            customer.Status,
+            customer.Notes,
+            linkedContractIds   = TryDeserializeStringArray(customer.LinkedContractIds),
+        });
     }
 
     private async Task<string> CreateCustomerAsync(ChatToolCall call, CancellationToken ct)
