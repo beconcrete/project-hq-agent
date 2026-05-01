@@ -111,12 +111,9 @@
           </ul>
         </div>
 
-        <RouterLink
-          :to="{ path: '/contracts', query: { contractId: selectedNode.contractId } }"
-          class="node-detail-link"
-        >
+        <button class="node-detail-link" type="button" @click="openContract(selectedNode.contractId)">
           View contract →
-        </RouterLink>
+        </button>
       </template>
 
       <template v-if="selectedNode.type === 'project'">
@@ -137,11 +134,12 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { RouterLink } from "vue-router";
 import cytoscape from "cytoscape";
 import { useHqGraph } from "../composables/useHqGraph";
+import { useAuth } from "../composables/useAuth";
 
 const { graph, loading, error, fetch } = useHqGraph();
+const auth = useAuth();
 
 const canvasEl = ref(null);
 const selectedNode = ref(null);
@@ -192,6 +190,22 @@ const REVIEW_LABELS = {
 function formatReviewState(state) {
   if (!state) return "—";
   return REVIEW_LABELS[state] ?? state.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+async function openContract(contractId) {
+  const tab = window.open("", "_blank");
+  try {
+    const res = await globalThis.fetch(
+      `/api/get-contract-download-url?correlationId=${encodeURIComponent(contractId)}`,
+      { headers: { "X-Auth-Token": `Bearer ${auth.getToken()}` } },
+    );
+    if (!res.ok) throw new Error(`Failed (${res.status})`);
+    const { url } = await res.json();
+    if (tab) tab.location.href = url;
+    else window.location.href = url;
+  } catch {
+    if (tab) tab.close();
+  }
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
