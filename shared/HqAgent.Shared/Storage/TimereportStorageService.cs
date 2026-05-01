@@ -53,6 +53,24 @@ public class TimereportStorageService
         return entity;
     }
 
+    public async Task<bool> DeleteAsync(
+        string email,
+        string rowKey,
+        CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Timereports);
+        try
+        {
+            await table.DeleteEntityAsync(email.ToLowerInvariant(), rowKey, ETag.All, ct);
+            _logger.LogInformation("Deleted timereport {RowKey} for {Email}", rowKey, email);
+            return true;
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> UpdateNoteAsync(
         string email,
         string rowKey,

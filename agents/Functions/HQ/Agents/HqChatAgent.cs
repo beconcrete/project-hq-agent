@@ -43,7 +43,10 @@ public class HqChatAgent
            Include the rowKey in your response so you can update the note in the next turn.
         3. When the user replies with what they did, call update_timereport_note with the rowKey from step 2.
         4. Confirm: "Got it — I've added your note to today's entry."
-        5. For queries like "how many hours this week?", call query_hours and sum the results.
+        5. For queries like "how many hours this week?" or "who reported on project X?", call query_hours.
+           The result includes every entry with its rowKey, employee email, date, hours, and note.
+        6. To remove entries: call query_hours first to find the matching entries and their rowKeys,
+           then call delete_timereport for each one. Never claim an entry was deleted without calling the tool.
 
         MULTI-DOMAIN: You can answer questions that span domains in a single response.
         Example: "which contracts expire next quarter and who are the employees affected?" —
@@ -124,8 +127,11 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("update_timereport_note",
             "Update the note on a previously logged time entry using the rowKey returned by log_time.",
             BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string"},"rowKey":{"type":"string"},"note":{"type":"string"}},"required":["employeeEmail","rowKey","note"]}""")),
+        ChatTool.CreateFunctionTool("delete_timereport",
+            "Permanently delete a specific time entry by its rowKey and the employee's email. Call query_hours first to obtain the rowKey of the entry to delete.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string","description":"Email (partition key) of the time entry"},"rowKey":{"type":"string","description":"Row key of the specific entry to delete"}},"required":["employeeEmail","rowKey"]}""")),
         ChatTool.CreateFunctionTool("query_hours",
-            "Query and sum hours for an employee, project, or customer over a date range.",
+            "Query hours for an employee, project, or customer over a date range. Returns each individual entry with its rowKey, date, employee email, hours, and note — use this to answer who reported time and to obtain rowKeys before deleting entries.",
             BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string"},"projectId":{"type":"string"},"customerId":{"type":"string"},"from":{"type":"string","description":"ISO yyyy-MM-dd"},"to":{"type":"string","description":"ISO yyyy-MM-dd"}},"required":[]}""")),
     ];
 
@@ -250,6 +256,7 @@ public class HqChatAgent
             // Timereports
             "log_time"               => await LogTimeAsync(call, userId, ct),
             "update_timereport_note" => await UpdateTimereportNoteAsync(call, ct),
+            "delete_timereport"      => await DeleteTimereportAsync(call, ct),
             "query_hours"            => await QueryHoursAsync(call, ct),
 
             _ => "Unknown tool",
@@ -601,6 +608,17 @@ public class HqChatAgent
         return updated ? """{"updated":true}""" : """{"updated":false,"error":"Entry not found"}""";
     }
 
+    private async Task<string> DeleteTimereportAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var email  = ParseStr(call, "employeeEmail");
+        var rowKey = ParseStr(call, "rowKey");
+        if (email is null || rowKey is null)
+            return "Missing employeeEmail or rowKey";
+
+        var deleted = await _timereportStorage.DeleteAsync(email, rowKey, ct);
+        return deleted ? """{"deleted":true}""" : """{"deleted":false,"error":"Entry not found"}""";
+    }
+
     private async Task<string> QueryHoursAsync(ChatToolCall call, CancellationToken ct)
     {
         var email      = ParseStr(call, "employeeEmail");
@@ -616,12 +634,19 @@ public class HqChatAgent
             ct);
 
         var total = entries.Sum(e => e.Hours);
-        var byDate = entries
-            .GroupBy(e => e.ReportDate)
-            .Select(g => new { date = g.Key, hours = g.Sum(e => e.Hours), entries = g.Count() })
-            .OrderBy(g => g.date);
-
-        return Serialize(new { totalHours = total, breakdown = byDate, entryCount = entries.Count });
+        return Serialize(new
+        {
+            totalHours = total,
+            entryCount = entries.Count,
+            entries    = entries.Select(e => new
+            {
+                rowKey   = e.RowKey,
+                date     = e.ReportDate,
+                employee = e.PartitionKey,
+                hours    = e.Hours,
+                note     = e.Note,
+            }),
+        });
     }
 
     // ── Chat history ──────────────────────────────────────────────────────────
