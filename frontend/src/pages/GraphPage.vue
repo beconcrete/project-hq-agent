@@ -42,93 +42,126 @@
       </div>
     </div>
 
-    <div v-if="selectedNode" class="node-detail">
-      <button class="node-detail-close" @click="selectedNode = null">×</button>
-      <p class="node-detail-type">{{ nodeTypeLabel(selectedNode.type) }}</p>
-      <p class="node-detail-name">{{ selectedNode.label }}</p>
+    <Transition name="detail-panel">
+      <aside
+        v-if="selectedNode"
+        class="node-detail"
+        :style="{ '--node-accent': selectedNode.color || '#126b5f' }"
+      >
+        <button class="node-detail-close" type="button" @click="selectedNode = null">×</button>
+        <div class="detail-badge">{{ nodeTypeLabel(selectedNode.type) }}</div>
+        <h3 class="detail-title">{{ selectedNode.label }}</h3>
 
-      <template v-if="selectedNode.type === 'customer'">
-        <p v-if="selectedNode.orgNumber" class="node-detail-row">
-          Org: {{ selectedNode.orgNumber }}
-        </p>
-        <p class="node-detail-row">
-          {{ selectedNode.contractCount }} contract{{
-            selectedNode.contractCount !== 1 ? "s" : ""
-          }}
-          · {{ selectedNode.projectCount }} project{{
-            selectedNode.projectCount !== 1 ? "s" : ""
-          }}
-        </p>
-      </template>
+        <template v-if="selectedNode.type === 'customer'">
+          <p v-if="selectedNode.orgNumber" class="node-detail-row">
+            Org: {{ selectedNode.orgNumber }}
+          </p>
+          <p class="node-detail-row">
+            {{ selectedNode.contractCount }} contract{{
+              selectedNode.contractCount !== 1 ? "s" : ""
+            }}
+            · {{ selectedNode.projectCount }} project{{
+              selectedNode.projectCount !== 1 ? "s" : ""
+            }}
+          </p>
+        </template>
 
-      <template v-if="selectedNode.type === 'contract'">
-        <dl class="node-detail-fields">
-          <div v-if="selectedNode.counterparty" class="node-detail-field">
-            <dt>Counterparty</dt>
-            <dd>{{ selectedNode.counterparty }}</dd>
-          </div>
-          <div v-if="selectedNode.expiryDate" class="node-detail-field">
-            <dt>Expires</dt>
-            <dd>{{ selectedNode.expiryDate }}</dd>
-          </div>
-          <div v-if="selectedNode.noticeDeadline" class="node-detail-field">
-            <dt>Notice deadline</dt>
-            <dd>{{ selectedNode.noticeDeadline }}</dd>
-          </div>
-          <div v-if="selectedNode.noticePeriodDays != null" class="node-detail-field">
-            <dt>Notice period</dt>
-            <dd>{{ selectedNode.noticePeriodDays }} days</dd>
-          </div>
-          <div v-if="selectedNode.autoRenewal != null" class="node-detail-field">
-            <dt>Renewal</dt>
-            <dd>{{ selectedNode.autoRenewal ? "Auto-renews" : "No auto-renewal" }}</dd>
-          </div>
-          <div v-if="contractPaymentSummary" class="node-detail-field">
-            <dt>Payment</dt>
-            <dd>{{ contractPaymentSummary }}</dd>
-          </div>
-          <div v-if="selectedNode.reviewState" class="node-detail-field">
-            <dt>Review</dt>
-            <dd>
-              <span class="node-review-chip" :class="`node-review-chip--${selectedNode.reviewState}`">
-                {{ formatReviewState(selectedNode.reviewState) }}
-              </span>
-            </dd>
-          </div>
-        </dl>
+        <template v-if="selectedNode.type === 'contract'">
+          <dl class="node-detail-fields">
+            <div v-if="selectedNode.counterparty" class="node-detail-field">
+              <dt>Counterparty</dt>
+              <dd>{{ selectedNode.counterparty }}</dd>
+            </div>
+            <div v-if="selectedNode.expiryDate" class="node-detail-field">
+              <dt>Expires</dt>
+              <dd>{{ selectedNode.expiryDate }}</dd>
+            </div>
+            <div v-if="selectedNode.noticeDeadline" class="node-detail-field">
+              <dt>Notice deadline</dt>
+              <dd>{{ selectedNode.noticeDeadline }}</dd>
+            </div>
+            <div v-if="selectedNode.noticePeriodDays != null" class="node-detail-field">
+              <dt>Notice period</dt>
+              <dd>{{ selectedNode.noticePeriodDays }} days</dd>
+            </div>
+            <div v-if="selectedNode.autoRenewal != null" class="node-detail-field">
+              <dt>Renewal</dt>
+              <dd>{{ selectedNode.autoRenewal ? "Auto-renews" : "No auto-renewal" }}</dd>
+            </div>
+            <div v-if="contractPaymentSummary" class="node-detail-field">
+              <dt>Payment</dt>
+              <dd>{{ contractPaymentSummary }}</dd>
+            </div>
+            <div v-if="selectedNode.reviewState" class="node-detail-field">
+              <dt>Review</dt>
+              <dd>
+                <span class="node-review-chip" :class="`node-review-chip--${selectedNode.reviewState}`">
+                  {{ formatReviewState(selectedNode.reviewState) }}
+                </span>
+              </dd>
+            </div>
+          </dl>
 
-        <div v-if="selectedNode.riskFlags && selectedNode.riskFlags.length" class="node-detail-risks">
-          <p class="node-detail-section">Risk flags</p>
-          <ul class="node-risk-list">
-            <li v-for="flag in selectedNode.riskFlags" :key="flag">{{ flag }}</li>
-          </ul>
-        </div>
+          <div v-if="selectedNode.riskFlags && selectedNode.riskFlags.length" class="node-detail-risks">
+            <p class="node-detail-section">Risk flags</p>
+            <ul class="node-risk-list">
+              <li v-for="flag in selectedNode.riskFlags" :key="flag">{{ flag }}</li>
+            </ul>
+          </div>
 
-        <div v-if="selectedNode.peopleMentioned && selectedNode.peopleMentioned.length" class="node-detail-people">
-          <p class="node-detail-section">People</p>
-          <ul class="node-people-list">
-            <li v-for="person in selectedNode.peopleMentioned" :key="person">{{ person }}</li>
-          </ul>
-        </div>
+          <div v-if="selectedNode.peopleMentioned && selectedNode.peopleMentioned.length" class="node-detail-people">
+            <p class="node-detail-section">People</p>
+            <ul class="node-people-list">
+              <li v-for="person in selectedNode.peopleMentioned" :key="person">{{ person }}</li>
+            </ul>
+          </div>
 
-        <button class="node-detail-link" type="button" @click="openContract(selectedNode.contractId)">
-          View contract →
-        </button>
-      </template>
+          <button class="node-detail-link" type="button" @click="openContract(selectedNode.contractId)">
+            View contract →
+          </button>
+        </template>
 
-      <template v-if="selectedNode.type === 'project'">
-        <p class="node-detail-row">{{ selectedNode.status }}</p>
-        <p v-if="selectedNode.startDate" class="node-detail-row">
-          {{ selectedNode.startDate
-          }}{{ selectedNode.endDate ? " → " + selectedNode.endDate : "" }}
-        </p>
-      </template>
+        <template v-if="selectedNode.type === 'project'">
+          <p class="node-detail-row">{{ selectedNode.status }}</p>
+          <p v-if="selectedNode.startDate" class="node-detail-row">
+            {{ selectedNode.startDate }}{{ selectedNode.endDate ? " → " + selectedNode.endDate : "" }}
+          </p>
 
-      <template v-if="selectedNode.type === 'employee'">
-        <p class="node-detail-row">{{ selectedNode.email }}</p>
-        <p class="node-detail-row">{{ selectedNode.status }}</p>
-      </template>
-    </div>
+          <div class="timereport-section">
+            <p class="node-detail-section">Hours reported</p>
+            <div v-if="projectTimereportsLoading" class="timereport-state">Loading…</div>
+            <template v-else-if="projectTimereports">
+              <p v-if="projectTimereports.months.length === 0" class="timereport-state timereport-state--empty">
+                No hours reported yet
+              </p>
+              <div v-else class="timereport-months">
+                <div v-for="m in projectTimereports.months" :key="m.month" class="timereport-month">
+                  <button class="month-header" type="button" @click="toggleMonth(m.month)">
+                    <span class="month-label">{{ formatMonth(m.month) }}</span>
+                    <span class="month-hours">{{ formatHours(m.totalHours) }}</span>
+                    <span class="month-chevron" :class="{ open: openMonths[m.month] }">›</span>
+                  </button>
+                  <div v-if="openMonths[m.month]" class="month-entries">
+                    <div v-for="(entry, i) in m.entries" :key="i" class="month-entry">
+                      <div class="entry-meta">
+                        <span class="entry-date">{{ entry.date }}</span>
+                        <span class="entry-hours">{{ entry.hours }}h</span>
+                      </div>
+                      <p v-if="entry.note" class="entry-note">{{ entry.note }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <template v-if="selectedNode.type === 'employee'">
+          <p class="node-detail-row">{{ selectedNode.email }}</p>
+          <p class="node-detail-row">{{ selectedNode.status }}</p>
+        </template>
+      </aside>
+    </Transition>
   </div>
 </template>
 
@@ -145,6 +178,9 @@ const canvasEl = ref(null);
 const selectedNode = ref(null);
 const focusedId = ref(null);
 const initialized = ref(false);
+const projectTimereports = ref(null);
+const projectTimereportsLoading = ref(false);
+const openMonths = ref({});
 
 let cy = null;
 let resizeObserver = null;
@@ -206,6 +242,58 @@ async function openContract(contractId) {
   } catch {
     if (tab) tab.close();
   }
+}
+
+// ── Project timereports ─────────────────────────────────────────────────────
+
+watch(selectedNode, async (node) => {
+  if (!node || node.type !== "project") {
+    projectTimereports.value = null;
+    openMonths.value = {};
+    return;
+  }
+  await fetchProjectTimereports(node.projectId);
+});
+
+async function fetchProjectTimereports(projectId) {
+  projectTimereportsLoading.value = true;
+  projectTimereports.value = null;
+  openMonths.value = {};
+  try {
+    const headers = {};
+    const token = auth.getToken();
+    if (token) headers["X-Auth-Token"] = `Bearer ${token}`;
+    const res = await globalThis.fetch(
+      `/api/project-timereports?projectId=${encodeURIComponent(projectId)}`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`Failed (${res.status})`);
+    const data = await res.json();
+    projectTimereports.value = data;
+    if (data.months.length > 0) openMonths.value = { [data.months[0].month]: true };
+  } catch {
+    projectTimereports.value = { months: [] };
+  } finally {
+    projectTimereportsLoading.value = false;
+  }
+}
+
+function toggleMonth(month) {
+  openMonths.value = { ...openMonths.value, [month]: !openMonths.value[month] };
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+function formatMonth(ym) {
+  const [year, month] = ym.split("-");
+  return `${MONTH_NAMES[parseInt(month, 10) - 1]} ${year}`;
+}
+
+function formatHours(h) {
+  return h % 1 === 0 ? `${h}h` : `${h.toFixed(1)}h`;
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -738,6 +826,7 @@ function initCytoscape() {
         ...node.data("record"),
         type: nodeType,
         label: node.data("label"),
+        color: node.data("color"),
       };
     }
 
@@ -899,53 +988,74 @@ function initCytoscape() {
 }
 
 .node-detail {
+  --node-accent: #126b5f;
   position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid #ddd7cd;
-  border-radius: 12px;
-  padding: 0.85rem 1rem;
-  min-width: 200px;
-  max-width: 280px;
-  max-height: calc(100% - 2rem);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  background: #fff;
+  border-left: 1px solid #ddd7cd;
+  padding: 1.25rem 1rem;
   overflow-y: auto;
-  z-index: 6;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 4px 20px rgba(24, 21, 17, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 10;
 }
 
 .node-detail-close {
   position: absolute;
-  top: 0.45rem;
-  right: 0.55rem;
-  border: none;
-  background: none;
-  color: #9a9388;
-  font-size: 1rem;
-  cursor: pointer;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: #f0ede6;
+  color: #746f67;
+  font-size: 1.1rem;
   line-height: 1;
-  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .node-detail-close:hover {
-  color: #181511;
+  background: #e5e0d8;
 }
 
-.node-detail-type {
-  font-size: 0.68rem;
-  font-weight: 800;
+.detail-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--node-accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #126b5f;
-  margin: 0 0 0.25rem;
+  letter-spacing: 0.04em;
+  width: fit-content;
 }
 
-.node-detail-name {
-  font-size: 0.9rem;
+.detail-title {
+  font-size: 0.95rem;
   font-weight: 700;
   color: #181511;
-  margin: 0 0 0.4rem;
+  margin: 0;
+  padding-right: 1.5rem;
   line-height: 1.3;
+}
+
+/* Slide-in from right */
+.detail-panel-enter-active,
+.detail-panel-leave-active {
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.detail-panel-enter-from,
+.detail-panel-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 
 .node-detail-row {
@@ -1047,15 +1157,128 @@ function initCytoscape() {
   display: block;
   margin-top: 0.65rem;
   padding-top: 0.55rem;
+  border: none;
   border-top: 1px solid #f0ede6;
+  background: none;
   font-size: 0.78rem;
   font-weight: 600;
   color: #126b5f;
   text-decoration: none;
+  cursor: pointer;
   transition: opacity 0.12s;
 }
 .node-detail-link:hover {
   opacity: 0.75;
   text-decoration: underline;
+}
+
+.timereport-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f0ede6;
+}
+
+.timereport-state {
+  font-size: 0.8rem;
+  color: #9a9388;
+}
+.timereport-state--empty {
+  font-style: italic;
+}
+
+.timereport-months {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.timereport-month {
+  border: 1px solid #ede9e2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.month-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  background: #fbfaf7;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.month-header:hover {
+  background: #f3f0ea;
+}
+
+.month-label {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #181511;
+}
+
+.month-hours {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--node-accent);
+}
+
+.month-chevron {
+  font-size: 1rem;
+  color: #9a9388;
+  line-height: 1;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.month-chevron.open {
+  transform: rotate(90deg);
+}
+
+.month-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid #ede9e2;
+}
+
+.month-entry {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #f5f2ec;
+}
+.month-entry:last-child {
+  border-bottom: 0;
+}
+
+.entry-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.entry-date {
+  font-size: 0.72rem;
+  color: #9a9388;
+}
+
+.entry-hours {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #181511;
+  white-space: nowrap;
+}
+
+.entry-note {
+  font-size: 0.78rem;
+  color: #4a4540;
+  margin: 0;
+  line-height: 1.4;
 }
 </style>
