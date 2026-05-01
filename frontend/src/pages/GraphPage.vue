@@ -46,6 +46,7 @@
       <button class="node-detail-close" @click="selectedNode = null">×</button>
       <p class="node-detail-type">{{ nodeTypeLabel(selectedNode.type) }}</p>
       <p class="node-detail-name">{{ selectedNode.label }}</p>
+
       <template v-if="selectedNode.type === 'customer'">
         <p v-if="selectedNode.orgNumber" class="node-detail-row">
           Org: {{ selectedNode.orgNumber }}
@@ -59,17 +60,65 @@
           }}
         </p>
       </template>
+
       <template v-if="selectedNode.type === 'contract'">
-        <p v-if="selectedNode.documentType" class="node-detail-row">
-          {{ selectedNode.documentType }}
-        </p>
-        <p v-if="selectedNode.expiryDate" class="node-detail-row">
-          Expires {{ selectedNode.expiryDate }}
-        </p>
-        <p v-if="selectedNode.reviewState" class="node-detail-row">
-          {{ selectedNode.reviewState }}
-        </p>
+        <dl class="node-detail-fields">
+          <div v-if="selectedNode.counterparty" class="node-detail-field">
+            <dt>Counterparty</dt>
+            <dd>{{ selectedNode.counterparty }}</dd>
+          </div>
+          <div v-if="selectedNode.expiryDate" class="node-detail-field">
+            <dt>Expires</dt>
+            <dd>{{ selectedNode.expiryDate }}</dd>
+          </div>
+          <div v-if="selectedNode.noticeDeadline" class="node-detail-field">
+            <dt>Notice deadline</dt>
+            <dd>{{ selectedNode.noticeDeadline }}</dd>
+          </div>
+          <div v-if="selectedNode.noticePeriodDays != null" class="node-detail-field">
+            <dt>Notice period</dt>
+            <dd>{{ selectedNode.noticePeriodDays }} days</dd>
+          </div>
+          <div v-if="selectedNode.autoRenewal != null" class="node-detail-field">
+            <dt>Renewal</dt>
+            <dd>{{ selectedNode.autoRenewal ? "Auto-renews" : "No auto-renewal" }}</dd>
+          </div>
+          <div v-if="contractPaymentSummary" class="node-detail-field">
+            <dt>Payment</dt>
+            <dd>{{ contractPaymentSummary }}</dd>
+          </div>
+          <div v-if="selectedNode.reviewState" class="node-detail-field">
+            <dt>Review</dt>
+            <dd>
+              <span class="node-review-chip" :class="`node-review-chip--${selectedNode.reviewState}`">
+                {{ formatReviewState(selectedNode.reviewState) }}
+              </span>
+            </dd>
+          </div>
+        </dl>
+
+        <div v-if="selectedNode.riskFlags && selectedNode.riskFlags.length" class="node-detail-risks">
+          <p class="node-detail-section">Risk flags</p>
+          <ul class="node-risk-list">
+            <li v-for="flag in selectedNode.riskFlags" :key="flag">{{ flag }}</li>
+          </ul>
+        </div>
+
+        <div v-if="selectedNode.peopleMentioned && selectedNode.peopleMentioned.length" class="node-detail-people">
+          <p class="node-detail-section">People</p>
+          <ul class="node-people-list">
+            <li v-for="person in selectedNode.peopleMentioned" :key="person">{{ person }}</li>
+          </ul>
+        </div>
+
+        <RouterLink
+          :to="{ path: '/contracts', query: { contractId: selectedNode.contractId } }"
+          class="node-detail-link"
+        >
+          View contract →
+        </RouterLink>
       </template>
+
       <template v-if="selectedNode.type === 'project'">
         <p class="node-detail-row">{{ selectedNode.status }}</p>
         <p v-if="selectedNode.startDate" class="node-detail-row">
@@ -77,6 +126,7 @@
           }}{{ selectedNode.endDate ? " → " + selectedNode.endDate : "" }}
         </p>
       </template>
+
       <template v-if="selectedNode.type === 'employee'">
         <p class="node-detail-row">{{ selectedNode.email }}</p>
         <p class="node-detail-row">{{ selectedNode.status }}</p>
@@ -87,6 +137,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { RouterLink } from "vue-router";
 import cytoscape from "cytoscape";
 import { useHqGraph } from "../composables/useHqGraph";
 
@@ -115,6 +166,33 @@ const PALETTE = [
 ];
 
 const hasGraph = computed(() => graph.value.nodes.length > 0);
+
+const contractPaymentSummary = computed(() => {
+  const n = selectedNode.value;
+  if (!n || n.type !== "contract") return null;
+  const parts = [];
+  if (n.paymentAmount != null) {
+    const formatted = Number(n.paymentAmount).toLocaleString("sv-SE");
+    parts.push(n.paymentCurrency ? `${formatted} ${n.paymentCurrency}` : formatted);
+  }
+  if (n.paymentUnit) parts.push(n.paymentUnit);
+  if (n.paymentType) parts.push(n.paymentType);
+  return parts.length ? parts.join(" · ") : null;
+});
+
+const REVIEW_LABELS = {
+  approved: "Approved",
+  approved_by_extraction: "Auto-approved",
+  pending_review: "Pending review",
+  rejected: "Rejected",
+  duplicate_deleted: "Duplicate",
+  failed: "Failed",
+};
+
+function formatReviewState(state) {
+  if (!state) return "—";
+  return REVIEW_LABELS[state] ?? state.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -810,12 +888,14 @@ function initCytoscape() {
   position: absolute;
   bottom: 1rem;
   left: 1rem;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.97);
   border: 1px solid #ddd7cd;
   border-radius: 12px;
   padding: 0.85rem 1rem;
-  min-width: 180px;
-  max-width: 240px;
+  min-width: 200px;
+  max-width: 280px;
+  max-height: calc(100% - 2rem);
+  overflow-y: auto;
   z-index: 6;
   backdrop-filter: blur(6px);
   box-shadow: 0 4px 20px rgba(24, 21, 17, 0.1);
@@ -859,5 +939,109 @@ function initCytoscape() {
   color: #746f67;
   margin: 0.15rem 0 0;
   line-height: 1.35;
+}
+
+.node-detail-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+}
+
+.node-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.node-detail-field dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #9a9388;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.node-detail-field dd {
+  font-size: 0.78rem;
+  color: #181511;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.node-review-chip {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.node-review-chip--approved { background: #d1fae5; color: #065f46; }
+.node-review-chip--approved_by_extraction { background: #dcfce7; color: #166534; }
+.node-review-chip--pending_review { background: #fef3c7; color: #92400e; }
+.node-review-chip--rejected { background: #fee2e2; color: #991b1b; }
+.node-review-chip--duplicate_deleted { background: #f3f4f6; color: #374151; }
+.node-review-chip--failed { background: #fee2e2; color: #991b1b; }
+
+.node-detail-section {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #9a9388;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.25rem;
+}
+
+.node-detail-risks,
+.node-detail-people {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f0ede6;
+}
+
+.node-risk-list,
+.node-people-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.node-risk-list li {
+  font-size: 0.72rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+
+.node-people-list li {
+  font-size: 0.72rem;
+  color: #181511;
+  background: #fbfaf7;
+  border: 1px solid #ddd7cd;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+
+.node-detail-link {
+  display: block;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #f0ede6;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #126b5f;
+  text-decoration: none;
+  transition: opacity 0.12s;
+}
+.node-detail-link:hover {
+  opacity: 0.75;
+  text-decoration: underline;
 }
 </style>

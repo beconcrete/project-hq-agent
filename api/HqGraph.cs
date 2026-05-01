@@ -150,16 +150,26 @@ public class HqGraph
                 var contractNodeId = $"contract:{contract.RowKey}:{customer.RowKey}";
                 nodes.Add(new
                 {
-                    id           = contractNodeId,
-                    type         = "contract",
-                    label        = ContractLabel(contract),
-                    parentId     = customerId,
-                    contractId   = contract.RowKey,
-                    documentType = contract.DocumentType,
-                    expiryDate   = contract.ExpiryDate?.ToString("yyyy-MM-dd"),
-                    reviewState  = contract.ReviewState,
-                    fileName     = contract.FileName,
-                    status       = contract.Status,
+                    id               = contractNodeId,
+                    type             = "contract",
+                    label            = ContractLabel(contract),
+                    parentId         = customerId,
+                    contractId       = contract.RowKey,
+                    documentType     = contract.DocumentType,
+                    expiryDate       = contract.ExpiryDate?.ToString("yyyy-MM-dd"),
+                    reviewState      = contract.ReviewState,
+                    fileName         = contract.FileName,
+                    status           = contract.Status,
+                    counterparty     = contract.PrimaryCounterparty,
+                    noticePeriodDays = contract.NoticePeriodDays,
+                    noticeDeadline   = contract.NoticeDeadline?.ToString("yyyy-MM-dd"),
+                    autoRenewal      = contract.AutoRenewal,
+                    paymentAmount    = contract.PaymentAmount,
+                    paymentCurrency  = contract.PaymentCurrency,
+                    paymentUnit      = contract.PaymentUnit,
+                    paymentType      = contract.PaymentType,
+                    riskFlags        = ParseJsonList(contract.RiskFlags),
+                    peopleMentioned  = ParseJsonList(contract.PeopleMentioned),
                 });
                 edges.Add(new
                 {
@@ -212,16 +222,26 @@ public class HqGraph
                 var contractNodeId = $"contract:{contract.RowKey}:unlinked";
                 nodes.Add(new
                 {
-                    id           = contractNodeId,
-                    type         = "contract",
-                    label        = ContractLabel(contract),
-                    parentId     = "__unlinked__",
-                    contractId   = contract.RowKey,
-                    documentType = contract.DocumentType,
-                    expiryDate   = contract.ExpiryDate?.ToString("yyyy-MM-dd"),
-                    reviewState  = contract.ReviewState,
-                    fileName     = contract.FileName,
-                    status       = contract.Status,
+                    id               = contractNodeId,
+                    type             = "contract",
+                    label            = ContractLabel(contract),
+                    parentId         = "__unlinked__",
+                    contractId       = contract.RowKey,
+                    documentType     = contract.DocumentType,
+                    expiryDate       = contract.ExpiryDate?.ToString("yyyy-MM-dd"),
+                    reviewState      = contract.ReviewState,
+                    fileName         = contract.FileName,
+                    status           = contract.Status,
+                    counterparty     = contract.PrimaryCounterparty,
+                    noticePeriodDays = contract.NoticePeriodDays,
+                    noticeDeadline   = contract.NoticeDeadline?.ToString("yyyy-MM-dd"),
+                    autoRenewal      = contract.AutoRenewal,
+                    paymentAmount    = contract.PaymentAmount,
+                    paymentCurrency  = contract.PaymentCurrency,
+                    paymentUnit      = contract.PaymentUnit,
+                    paymentType      = contract.PaymentType,
+                    riskFlags        = ParseJsonList(contract.RiskFlags),
+                    peopleMentioned  = ParseJsonList(contract.PeopleMentioned),
                 });
                 edges.Add(new
                 {
