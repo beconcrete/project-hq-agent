@@ -16,7 +16,7 @@ public class TableStorageService
         _logger = logger;
     }
 
-    public async Task WriteExtractionAsync(
+    public async Task<ContractEntity> WriteExtractionAsync(
         ContractMessage   message,
         ExtractionResult  extraction,
         CancellationToken ct = default)
@@ -81,6 +81,8 @@ public class TableStorageService
         _logger.LogInformation(
             "Wrote extraction record — contractId:{ContractId} docType:{DocType} status:{Status}",
             message.CorrelationId, extraction.DocumentType, entity.Status);
+
+        return entity;
     }
 
     public async Task UpdateLinkedCustomersAsync(

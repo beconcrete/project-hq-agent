@@ -2,6 +2,7 @@ using System.Text.Json;
 using Azure;
 using Azure.Data.Tables;
 using HqAgent.Agents.Contract.Services;
+using HqAgent.Agents.HQ.Services;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Extensions.Configuration;
@@ -47,6 +48,15 @@ public class HqChatAgent
            The result includes every entry with its rowKey, employee email, date, hours, and note.
         6. To remove entries: call query_hours first to find the matching entries and their rowKeys,
            then call delete_timereport for each one. Never claim an entry was deleted without calling the tool.
+
+        SEARCH: Use search_entities for cross-entity discovery — any question where you don't
+        know which domain holds the answer, or where the answer spans multiple domains.
+        Examples: "who is connected to X", "find anything related to Y",
+        "which companies does Z work with", "find projects involving [person name]".
+        After search_entities returns hits, use entityType + entityId to call the appropriate
+        get_* tool for full details (get_project, get_customer, get_contract, get_employee).
+        Do NOT use search_entities for time queries — use query_hours instead.
+        Do NOT use search_entities when you already know the domain and have an ID.
 
         MULTI-DOMAIN: You can answer questions that span domains in a single response.
         Example: "which contracts expire next quarter and who are the employees affected?" —
@@ -120,6 +130,11 @@ public class HqChatAgent
             "Create a new project. Name and customerId are required. Resolve the customer by name first if needed.",
             BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"customerId":{"type":"string"},"customerName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"description":{"type":"string"},"employeeEmails":{"type":"array","items":{"type":"string"}}},"required":["name","customerId"]}""")),
 
+        // Cross-entity search
+        ChatTool.CreateFunctionTool("search_entities",
+            "Semantic search across all entity types (employees, customers, projects, contracts). Use for cross-domain discovery questions where you don't know which domain holds the answer.",
+            BinaryData.FromString("""{"type":"object","properties":{"query":{"type":"string","description":"Natural language search query"},"limit":{"type":"integer","description":"Max results to return, default 15"}},"required":["query"]}""")),
+
         // Timereports
         ChatTool.CreateFunctionTool("log_time",
             "Log a time entry for an employee on a project. Returns a rowKey to use with update_timereport_note.",
@@ -142,6 +157,9 @@ public class HqChatAgent
     private readonly CustomerStorageService _customerStorage;
     private readonly ProjectStorageService _projectStorage;
     private readonly TimereportStorageService _timereportStorage;
+    private readonly EmbeddingOrchestrator _embeddings;
+    private readonly EmbeddingCacheService _cache;
+    private readonly EmbeddingService _embeddingService;
     private readonly ILogger<HqChatAgent> _logger;
 
     public HqChatAgent(
@@ -151,6 +169,9 @@ public class HqChatAgent
         CustomerStorageService   customerStorage,
         ProjectStorageService    projectStorage,
         TimereportStorageService timereportStorage,
+        EmbeddingOrchestrator    embeddings,
+        EmbeddingCacheService    cache,
+        EmbeddingService         embeddingService,
         IConfiguration           config,
         ILogger<HqChatAgent>     logger)
     {
@@ -160,6 +181,9 @@ public class HqChatAgent
         _customerStorage   = customerStorage;
         _projectStorage    = projectStorage;
         _timereportStorage = timereportStorage;
+        _embeddings        = embeddings;
+        _cache             = cache;
+        _embeddingService  = embeddingService;
         _logger            = logger;
 
         var apiKey = config["OPENAI_API_KEY"]
@@ -227,6 +251,9 @@ public class HqChatAgent
         CancellationToken ct) =>
         call.FunctionName switch
         {
+            // Cross-entity search
+            "search_entities"           => await SearchEntitiesAsync(call, ct),
+
             // Contracts
             "list_contracts"            => await ListContractsAsync(caller, ct),
             "find_expiring_contracts"   => await FindExpiringAsync(call, caller, ct),
@@ -261,6 +288,27 @@ public class HqChatAgent
 
             _ => "Unknown tool",
         };
+
+    // ── Search ────────────────────────────────────────────────────────────────
+
+    private async Task<string> SearchEntitiesAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var query = ParseStr(call, "query");
+        if (query is null) return "Missing query";
+        var limit = (int?)ParseDouble(call, "limit") ?? 15;
+
+        await _cache.EnsureLoadedAsync(ct);
+        var queryVector = await _embeddingService.GenerateAsync(query, ct);
+        var hits = _cache.Search(queryVector, limit);
+
+        return Serialize(hits.Select(h => new
+        {
+            entityType = h.EntityType,
+            entityId   = h.EntityId,
+            score      = MathF.Round(h.Score, 3),
+            snippet    = h.Snippet,
+        }));
+    }
 
     // ── Contract tools ────────────────────────────────────────────────────────
 
@@ -401,6 +449,7 @@ public class HqChatAgent
             entity.StartDate = new DateTimeOffset(start.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
         await _hrStorage.WriteEmployeeAsync(entity, ct);
+        await _embeddings.IndexAsync(entity, ct);
         return Serialize(new { created = true, email = entity.Email, fullName = entity.FullName });
     }
 
@@ -458,6 +507,7 @@ public class HqChatAgent
         };
 
         await _customerStorage.WriteCustomerAsync(entity, ct);
+        await _embeddings.IndexAsync(entity, ct);
         return Serialize(new { created = true, customerId = entity.RowKey, name = entity.Name });
     }
 
@@ -552,6 +602,7 @@ public class HqChatAgent
             entity.EndDate = end.ToDateTime(TimeOnly.MinValue);
 
         await _projectStorage.WriteProjectAsync(entity, ct);
+        await _embeddings.IndexAsync(entity, ct);
         return Serialize(new { created = true, projectId = entity.RowKey, name = entity.Name, customerId });
     }
 

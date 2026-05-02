@@ -1,4 +1,5 @@
 using HqAgent.Agents.Contract.Agents;
+using HqAgent.Agents.HQ.Services;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;
@@ -11,18 +12,21 @@ public class ContractIngestion
     private readonly ContractOrchestratorAgent _agent;
     private readonly TableStorageService       _table;
     private readonly CustomerStorageService    _customers;
+    private readonly EmbeddingOrchestrator     _embeddings;
     private readonly ILogger<ContractIngestion> _logger;
 
     public ContractIngestion(
         ContractOrchestratorAgent  agent,
         TableStorageService        table,
         CustomerStorageService     customers,
+        EmbeddingOrchestrator      embeddings,
         ILogger<ContractIngestion> logger)
     {
-        _agent     = agent;
-        _table     = table;
-        _customers = customers;
-        _logger    = logger;
+        _agent      = agent;
+        _table      = table;
+        _customers  = customers;
+        _embeddings = embeddings;
+        _logger     = logger;
     }
 
     [Function(nameof(ContractIngestion))]
@@ -60,6 +64,10 @@ public class ContractIngestion
 
         await _table.WriteExtractionAsync(msg, extraction, context.CancellationToken);
         await LinkCustomersAsync(msg.CorrelationId, extraction, context.CancellationToken);
+        // Reload after customer linking so LinkedCustomerNames are included in the embedding
+        var contractEntity = await _table.GetExtractionAsync(msg.CorrelationId, context.CancellationToken);
+        if (contractEntity is not null)
+            await _embeddings.IndexAsync(contractEntity, context.CancellationToken);
 
         _logger.LogInformation(
             "Contract {CorrelationId} stored — type:{DocumentType} pendingReview:{Pending} model:{Model}",
