@@ -43,15 +43,23 @@ HQ Agent is the company headquarters platform. A modular Azure Static Web App wi
 | Entity | Table | PartitionKey | RowKey |
 |---|---|---|---|
 | Contract | `Contracts` | `"contracts"` | contractId (GUID — same value as the old correlationId) |
-| Employee | `Employees` | `"employees"` | email (lowercase) |
+| Employee | `Employees` | `"employees"` | employeeId (GUID, immutable — never derived from email) |
 | Customer | `Customers` | `"customers"` | customerId (GUID) |
 | Project | `Projects` | `"projects"` | projectId (GUID) |
-| Timereport | `Timereports` | employeeEmail (lowercase) | `{date:yyyyMMdd}_{projectId}_{ticks:D20}` |
+| Timereport | `Timereports` | employeeId (GUID) | `{date:yyyyMMdd}_{projectId}_{ticks:D20}` |
 | HQChatHistory | `HQChatHistory` | userId | `{sessionId}_{ticks:D20}` |
 
+**Employee identity fields (separate from the immutable RowKey):**
+- `WorkEmail` — work email address (e.g. bjorn@beconcrete.se), editable without breaking references
+- `LoginEmail` — Auth0 JWT email used for social login (may differ from WorkEmail)
+- `Auth0Subject` — Auth0 `sub` claim (e.g. `google-oauth2|105...`), most reliable auth identity
+- Auth lookup order in `FindByAuthAsync`: Auth0Subject → LoginEmail → WorkEmail
+- Use `link_auth_identity` (agent tool, admin only) to link a social login to an employee record
+
 **Entity relationships:**
-- `Project` → `Customer` via `CustomerId`; team stored as `EmployeeEmails` (JSON array of lowercase emails)
-- `Timereport` → `Project` (ProjectId) + `Customer` (CustomerId, denormalised) + `Employee` (PartitionKey = email)
+- `Project` → `Customer` via `CustomerId`; team stored as `EmployeeIds` (JSON array of employeeId GUIDs)
+- `Timereport` → `Project` (ProjectId) + `Customer` (CustomerId, denormalised) + `Employee` (PartitionKey = employeeId GUID)
+- `Timereport.WorkEmail` is denormalised for display only — the authoritative key is PartitionKey (employeeId)
 - Multiple timereport entries per employee+project+day are allowed — the ticks suffix makes each row unique
 
 ### Rules
@@ -220,8 +228,10 @@ See [docs/MAF.md](./docs/MAF.md) for patterns, gotchas, and working examples cov
 **Primary user-facing agent: `HqChatAgent`** (`agents/Functions/HQ/Agents/HqChatAgent.cs`)
 - Direct OpenAI tool-calling loop (same pattern as `ContractChatAgent`) — not MAF.
 - `search_entities` is the primary entry point for all name-based queries. The agent calls it first whenever the user mentions a name (customer, project, person, contract), retrieves the entityId, and uses it in follow-up domain tools. Users never work with IDs directly.
-- Tool registry: `search_entities` (primary), `get_*` (full detail fetch), `list_*` (enumerate all), `create_*` / `update_*` / `delete_*` (writes), `link_contract_to_customer` (contract–customer linking), `find_expiring_contracts` / `find_renewal_windows` (date-range contract queries), `query_hours` / `log_time` / `update_timereport_note` / `delete_timereport` (time reporting).
+- Tool registry: `search_entities` (primary), `get_*` (full detail fetch), `list_*` (enumerate all), `create_*` / `update_*` / `delete_*` (writes), `link_contract_to_customer` (contract–customer linking), `link_auth_identity` (admin: bind Auth0 login to employee), `find_expiring_contracts` / `find_renewal_windows` (date-range contract queries), `query_hours` / `log_time` / `update_timereport_note` / `delete_timereport` (time reporting).
 - Removed name-based lookup tools superseded by `search_entities`: `find_contracts_by_person`, `find_contracts_by_counterparty`, `find_employees_by_project`, `list_projects_by_customer`, `list_projects_by_employee`.
+- Employee tools use `employeeId` (GUID) not email. Time report tools use `employeeId` as the partition key identifier.
+- Project team membership stored as `employeeIds` (JSON array of GUIDs); use `addEmployeeIds`/`removeEmployeeIds` in `update_project`.
 
 **CRUD rule — every entity must have full CRUD tools:**
 

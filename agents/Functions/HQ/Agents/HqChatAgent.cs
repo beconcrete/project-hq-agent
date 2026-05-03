@@ -15,8 +15,8 @@ namespace HqAgent.Agents.HQ.Agents;
 
 public class HqChatAgent
 {
-    private const string MiniModel     = "gpt-4.1-mini";
-    private const int    MaxHistory    = 20;
+    private const string MiniModel  = "gpt-4.1-mini";
+    private const int    MaxHistory = 20;
 
     private const string SystemPrompt = """
         You are HQ — the unified company assistant. You have access to tools for every domain:
@@ -30,9 +30,9 @@ public class HqChatAgent
         Example flows:
         - "projects for Cibus" → search_entities("Cibus") → entityId = customerId → list_projects_by_customer(customerId)
         - "hours on AI Transformation" → search_entities("AI Transformation") → entityId = projectId → query_hours(projectId)
-        - "Björn's time this month" → search_entities("Björn Eriksen") → entityId = email → query_hours(employeeEmail)
+        - "Björn's time this month" → search_entities("Björn Eriksen") → entityId = employeeId (GUID) → query_hours(employeeId)
         - "contracts for Volvo" → search_entities("Volvo") → contract and customer hits → get_contract(id) for each
-        - "who works on AI Transformation?" → search_entities("AI Transformation") → projectId → get_project(id) → employeeEmails
+        - "who works on AI Transformation?" → search_entities("AI Transformation") → projectId → get_project(id) → employeeIds
 
         Only skip search_entities when:
         - The user asks for a full list with no filter ("list all projects", "show all employees")
@@ -46,11 +46,14 @@ public class HqChatAgent
         Deleted or rejected contracts are not active and must not be treated as available agreements.
 
         PROJECTS: To add or remove employees from an existing project, ALWAYS use update_project with
-        addEmployeeEmails or removeEmployeeEmails. NEVER call create_project to modify an existing project.
+        addEmployeeIds or removeEmployeeIds (pass employeeId GUIDs, not emails). NEVER call create_project
+        to modify an existing project.
 
         CUSTOMERS: When creating a customer only the name is required; ask for optional fields if you have them.
 
-        EMPLOYEES: When creating an employee, email and full name are required; other fields are optional.
+        EMPLOYEES: When creating an employee, workEmail and fullName are required; other fields are optional.
+        Employees are identified by their employeeId (GUID). Use search_entities to resolve a name to an employeeId.
+        Use link_auth_identity (admin only) to connect an employee's Auth0 login identity to their record.
 
         TIME REPORTING — conversational flow:
         1. When the user reports time (e.g. "report 2 hours on project X"), call search_entities first
@@ -89,14 +92,15 @@ public class HqChatAgent
 
         // Employees
         ChatTool.CreateFunctionTool("list_employees",
-            "List all active employees with their name, email, seniority, salary, and billing rate.",
+            "List all active employees with their name, workEmail, employeeId, seniority, salary, and billing rate.",
             BinaryData.FromString("""{"type":"object","properties":{"includeOffboarded":{"type":"boolean"}},"required":[]}""")),
         ChatTool.CreateFunctionTool("get_employee",
-            "Get details for a specific employee by email address.",
-            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
+            "Get details for a specific employee by their employeeId (GUID).",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string"}},"required":["employeeId"]}""")),
         ChatTool.CreateFunctionTool("create_employee",
-            "Create or update an employee record. Email and fullName are required.",
-            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"},"fullName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"}},"required":["email","fullName"]}""")),
+            "Create a new employee record. workEmail and fullName are required. Returns the new employeeId.",
+            BinaryData.FromString("""{"type":"object","properties":{"workEmail":{"type":"string","description":"Work email, e.g. bjorn@beconcrete.se"},"fullName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"}},"required":["workEmail","fullName"]}""")),
+
         // Customers
         ChatTool.CreateFunctionTool("list_customers",
             "List all customers.",
@@ -110,25 +114,28 @@ public class HqChatAgent
 
         // Projects
         ChatTool.CreateFunctionTool("list_projects",
-            "List all projects with customer, status, and assigned employees.",
+            "List all projects with customer, status, and assigned employee IDs.",
             BinaryData.FromString("""{"type":"object","properties":{"includeClosedProjects":{"type":"boolean"}},"required":[]}""")),
         ChatTool.CreateFunctionTool("get_project",
             "Get details for a specific project by ID.",
             BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"}},"required":["projectId"]}""")),
         ChatTool.CreateFunctionTool("create_project",
-            "Create a new project. Name and customerId are required. Resolve the customer by name first if needed. NEVER call this to add an employee to an existing project — use update_project instead.",
-            BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"customerId":{"type":"string"},"customerName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"description":{"type":"string"},"employeeEmails":{"type":"array","items":{"type":"string"}}},"required":["name","customerId"]}""")),
+            "Create a new project. Name and customerId are required. NEVER call this to add an employee to an existing project — use update_project instead.",
+            BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"customerId":{"type":"string"},"customerName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"description":{"type":"string"},"employeeIds":{"type":"array","items":{"type":"string"},"description":"employeeId GUIDs to assign"}},"required":["name","customerId"]}""")),
         ChatTool.CreateFunctionTool("update_project",
-            "Update an existing project. Only the fields you provide are changed; omitted fields are left as-is. To add employees, pass addEmployeeEmails. To remove employees, pass removeEmployeeEmails. Never use create_project for updates.",
-            BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"},"name":{"type":"string"},"status":{"type":"string","enum":["active","closed"]},"description":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"addEmployeeEmails":{"type":"array","items":{"type":"string"},"description":"Emails to add to the project team"},"removeEmployeeEmails":{"type":"array","items":{"type":"string"},"description":"Emails to remove from the project team"}},"required":["projectId"]}""")),
+            "Update an existing project. Only the fields you provide are changed. To add employees pass addEmployeeIds; to remove pass removeEmployeeIds. Never use create_project for updates.",
+            BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"},"name":{"type":"string"},"status":{"type":"string","enum":["active","closed"]},"description":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"addEmployeeIds":{"type":"array","items":{"type":"string"},"description":"employeeId GUIDs to add to the team"},"removeEmployeeIds":{"type":"array","items":{"type":"string"},"description":"employeeId GUIDs to remove from the team"}},"required":["projectId"]}""")),
 
         // Employees (continued)
         ChatTool.CreateFunctionTool("update_employee",
-            "Update fields on an existing employee. Only the fields you provide are changed. Use status='offboarded' when an employee leaves.",
-            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"},"fullName":{"type":"string"},"status":{"type":"string","enum":["active","offboarded"]},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"},"offboardDate":{"type":"string","description":"ISO yyyy-MM-dd"}},"required":["email"]}""")),
+            "Update fields on an existing employee by employeeId. Only the fields you provide are changed. Use status='offboarded' when an employee leaves. workEmail, loginEmail, and auth0Subject can all be updated independently.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string"},"fullName":{"type":"string"},"workEmail":{"type":"string","description":"Work email address"},"status":{"type":"string","enum":["active","offboarded"]},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"},"offboardDate":{"type":"string","description":"ISO yyyy-MM-dd"}},"required":["employeeId"]}""")),
         ChatTool.CreateFunctionTool("delete_employee",
-            "Permanently delete an employee record by email.",
-            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
+            "Permanently delete an employee record by employeeId.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string"}},"required":["employeeId"]}""")),
+        ChatTool.CreateFunctionTool("link_auth_identity",
+            "Admin: link an Auth0 login identity to an employee record. Sets auth0Subject (the Auth0 sub claim) and/or loginEmail (the email used for social login). Use this when an employee's login email differs from their work email.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string"},"auth0Subject":{"type":"string","description":"Auth0 sub claim, e.g. google-oauth2|105... or windowslive|abc..."},"loginEmail":{"type":"string","description":"Email used to log in, if different from work email"}},"required":["employeeId"]}""")),
 
         // Customers (continued)
         ChatTool.CreateFunctionTool("update_customer",
@@ -145,7 +152,7 @@ public class HqChatAgent
 
         // Contracts (continued)
         ChatTool.CreateFunctionTool("link_contract_to_customer",
-            "Link a contract to a customer. Use this when the agent identifies which customer a contract belongs to. Resolves IDs via search_entities first.",
+            "Link a contract to a customer. Use this when the agent identifies which customer a contract belongs to.",
             BinaryData.FromString("""{"type":"object","properties":{"contractId":{"type":"string"},"customerId":{"type":"string"}},"required":["contractId","customerId"]}""")),
         ChatTool.CreateFunctionTool("delete_contract",
             "Permanently delete a contract record by ID. Use when the user wants to remove a duplicate or superseded version.",
@@ -158,17 +165,17 @@ public class HqChatAgent
 
         // Timereports
         ChatTool.CreateFunctionTool("log_time",
-            "Log a time entry for an employee on a project. Returns a rowKey to use with update_timereport_note.",
-            BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string","description":"Email of the reporting employee"},"projectId":{"type":"string","description":"Resolved project GUID"},"date":{"type":"string","description":"ISO yyyy-MM-dd, defaults to today"},"hours":{"type":"number"},"note":{"type":"string","description":"Optional note; omit to ask the user"}},"required":["employeeEmail","projectId","hours"]}""")),
+            "Log a time entry for an employee on a project. Pass the employeeId (GUID). Returns a rowKey to use with update_timereport_note.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string","description":"employeeId (GUID) of the reporting employee"},"projectId":{"type":"string","description":"Resolved project GUID"},"date":{"type":"string","description":"ISO yyyy-MM-dd, defaults to today"},"hours":{"type":"number"},"note":{"type":"string","description":"Optional note; omit to ask the user"}},"required":["employeeId","projectId","hours"]}""")),
         ChatTool.CreateFunctionTool("update_timereport_note",
             "Update the note on a previously logged time entry using the rowKey returned by log_time.",
-            BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string"},"rowKey":{"type":"string"},"note":{"type":"string"}},"required":["employeeEmail","rowKey","note"]}""")),
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string","description":"employeeId (GUID)"},"rowKey":{"type":"string"},"note":{"type":"string"}},"required":["employeeId","rowKey","note"]}""")),
         ChatTool.CreateFunctionTool("delete_timereport",
-            "Permanently delete a specific time entry by its rowKey and the employee's email. Call query_hours first to obtain the rowKey of the entry to delete.",
-            BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string","description":"Email (partition key) of the time entry"},"rowKey":{"type":"string","description":"Row key of the specific entry to delete"}},"required":["employeeEmail","rowKey"]}""")),
+            "Permanently delete a specific time entry by its rowKey and the employee's employeeId. Call query_hours first to obtain the rowKey.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string","description":"employeeId (GUID) of the employee"},"rowKey":{"type":"string","description":"Row key of the specific entry to delete"}},"required":["employeeId","rowKey"]}""")),
         ChatTool.CreateFunctionTool("query_hours",
-            "Query hours for an employee, project, or customer over a date range. Returns each individual entry with its rowKey, date, employee email, hours, and note — use this to answer who reported time and to obtain rowKeys before deleting entries.",
-            BinaryData.FromString("""{"type":"object","properties":{"employeeEmail":{"type":"string"},"projectId":{"type":"string"},"customerId":{"type":"string"},"from":{"type":"string","description":"ISO yyyy-MM-dd"},"to":{"type":"string","description":"ISO yyyy-MM-dd"}},"required":[]}""")),
+            "Query hours for an employee, project, or customer over a date range. Returns each individual entry with its rowKey, date, employeeId, workEmail, hours, and note.",
+            BinaryData.FromString("""{"type":"object","properties":{"employeeId":{"type":"string","description":"employeeId (GUID)"},"projectId":{"type":"string"},"customerId":{"type":"string"},"from":{"type":"string","description":"ISO yyyy-MM-dd"},"to":{"type":"string","description":"ISO yyyy-MM-dd"}},"required":[]}""")),
     ];
 
     private readonly ChatClient _chatClient;
@@ -220,20 +227,20 @@ public class HqChatAgent
         string message,
         string userId,
         string userEmail,
+        string auth0Subject,
         bool   isAdmin,
         CancellationToken ct)
     {
         var caller  = new ContractCallerContext(userId, isAdmin);
         var history = await LoadHistoryAsync(userId, sessionId, ct);
 
-        var userEmployee = !string.IsNullOrEmpty(userEmail)
-            ? await _hrStorage.GetEmployeeAsync(userEmail, ct)
-            : null;
-        var userContext = userEmployee is not null
-            ? $"The signed-in user is {userEmployee.FullName} (email: {userEmail}{(isAdmin ? ", role: admin" : "")})."
+        // Identify the signed-in user's employee record via Auth0 subject or login email.
+        var userEmployee = await _hrStorage.FindByAuthAsync(auth0Subject, userEmail, ct);
+        var userContext  = userEmployee is not null
+            ? $"The signed-in user is {userEmployee.FullName} (employeeId: {userEmployee.RowKey}, workEmail: {userEmployee.WorkEmail}{(isAdmin ? ", role: admin" : "")})."
             : !string.IsNullOrEmpty(userEmail)
-                ? $"The signed-in user has email {userEmail}{(isAdmin ? " (admin)" : "")}."
-                : $"The signed-in user id is {userId}{(isAdmin ? " (admin)" : "")}.";
+                ? $"The signed-in user has email {userEmail}{(isAdmin ? " (admin)" : "")}. No matching employee record found."
+                : $"No employee record found for the signed-in user{(isAdmin ? " (admin)" : "")}.";
 
         var messages = new List<ChatMessage>
         {
@@ -262,7 +269,7 @@ public class HqChatAgent
                 messages.Add(new AssistantChatMessage(completion));
                 foreach (var call in completion.ToolCalls)
                 {
-                    var toolResult = await ExecuteToolAsync(call, caller, userId, ct);
+                    var toolResult = await ExecuteToolAsync(call, caller, userEmployee?.RowKey, ct);
                     _logger.LogInformation("HQ tool {Tool} called, result length: {Len}", call.FunctionName, toolResult.Length);
                     messages.Add(new ToolChatMessage(call.Id, toolResult));
                 }
@@ -285,7 +292,7 @@ public class HqChatAgent
     private async Task<string> ExecuteToolAsync(
         ChatToolCall call,
         ContractCallerContext caller,
-        string userId,
+        string? userEmployeeId,
         CancellationToken ct) =>
         call.FunctionName switch
         {
@@ -304,6 +311,7 @@ public class HqChatAgent
             "create_employee"           => await CreateEmployeeAsync(call, ct),
             "update_employee"           => await UpdateEmployeeAsync(call, ct),
             "delete_employee"           => await DeleteEmployeeAsync(call, ct),
+            "link_auth_identity"        => await LinkAuthIdentityAsync(call, ct),
 
             // Customers
             "list_customers"            => await ListCustomersAsync(call, ct),
@@ -324,7 +332,7 @@ public class HqChatAgent
             "delete_contract"           => await DeleteContractAsync(call, ct),
 
             // Timereports
-            "log_time"               => await LogTimeAsync(call, userId, ct),
+            "log_time"               => await LogTimeAsync(call, userEmployeeId, ct),
             "update_timereport_note" => await UpdateTimereportNoteAsync(call, ct),
             "delete_timereport"      => await DeleteTimereportAsync(call, ct),
             "query_hours"            => await QueryHoursAsync(call, ct),
@@ -403,30 +411,33 @@ public class HqChatAgent
         var employees = await _hrStorage.ListEmployeesAsync(includeOffboarded, ct);
         return Serialize(employees.Select(e => new
         {
-            email          = e.RowKey,
-            name           = e.FullName,
-            status         = e.Status,
-            seniorityLevel = e.SeniorityLevel,
-            startDate      = e.StartDate,
-            baseSalary     = e.BaseSalary,
+            employeeId      = e.RowKey,
+            name            = e.FullName,
+            workEmail       = e.WorkEmail,
+            status          = e.Status,
+            seniorityLevel  = e.SeniorityLevel,
+            startDate       = e.StartDate,
+            baseSalary      = e.BaseSalary,
             billingBaseRate = e.BillingBaseRate,
         }));
     }
 
     private async Task<string> GetEmployeeAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email = ParseStr(call, "email");
-        if (email is null) return "Missing email";
-        var e = await _hrStorage.GetEmployeeAsync(email, ct);
+        var employeeId = ParseStr(call, "employeeId");
+        if (employeeId is null) return "Missing employeeId";
+        var e = await _hrStorage.GetEmployeeAsync(employeeId, ct);
         if (e is null) return "Employee not found";
         return Serialize(new
         {
-            email          = e.RowKey,
-            name           = e.FullName,
-            status         = e.Status,
-            seniorityLevel = e.SeniorityLevel,
-            startDate      = e.StartDate,
-            baseSalary     = e.BaseSalary,
+            employeeId      = e.RowKey,
+            name            = e.FullName,
+            workEmail       = e.WorkEmail,
+            loginEmail      = e.LoginEmail,
+            status          = e.Status,
+            seniorityLevel  = e.SeniorityLevel,
+            startDate       = e.StartDate,
+            baseSalary      = e.BaseSalary,
             billingBaseRate = e.BillingBaseRate,
             vacationBalance = e.VacationBalance,
         });
@@ -434,14 +445,15 @@ public class HqChatAgent
 
     private async Task<string> CreateEmployeeAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email    = ParseStr(call, "email");
-        var fullName = ParseStr(call, "fullName");
-        if (string.IsNullOrWhiteSpace(email))    return "Missing email";
-        if (string.IsNullOrWhiteSpace(fullName)) return "Missing fullName";
+        var workEmail = ParseStr(call, "workEmail");
+        var fullName  = ParseStr(call, "fullName");
+        if (string.IsNullOrWhiteSpace(workEmail)) return "Missing workEmail";
+        if (string.IsNullOrWhiteSpace(fullName))  return "Missing fullName";
 
         var entity = new EmployeeEntity
         {
-            Email           = email.ToLowerInvariant(),
+            RowKey          = Guid.NewGuid().ToString(),
+            WorkEmail       = workEmail.ToLowerInvariant(),
             FullName        = fullName,
             Status          = "active",
             BaseSalary      = ParseDouble(call, "baseSalary")      ?? 0,
@@ -456,44 +468,64 @@ public class HqChatAgent
 
         await _hrStorage.WriteEmployeeAsync(entity, ct);
         await _embeddings.IndexAsync(entity, ct);
-        return Serialize(new { created = true, email = entity.Email, fullName = entity.FullName });
+        return Serialize(new { created = true, employeeId = entity.RowKey, workEmail = entity.WorkEmail, fullName = entity.FullName });
     }
 
     private async Task<string> UpdateEmployeeAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email = ParseStr(call, "email");
-        if (string.IsNullOrWhiteSpace(email)) return "Missing email";
+        var employeeId = ParseStr(call, "employeeId");
+        if (string.IsNullOrWhiteSpace(employeeId)) return "Missing employeeId";
 
-        var existing = await _hrStorage.GetEmployeeAsync(email, ct);
+        var existing = await _hrStorage.GetEmployeeAsync(employeeId, ct);
         if (existing is null) return "Employee not found";
 
         var fullName        = ParseStr(call, "fullName");
+        var workEmail       = ParseStr(call, "workEmail");
         var status          = ParseStr(call, "status");
         var seniorityLevel  = ParseStr(call, "seniorityLevel");
         var baseSalary      = ParseDouble(call, "baseSalary");
         var billingBaseRate = ParseDouble(call, "billingBaseRate");
         var offboardStr     = ParseStr(call, "offboardDate");
 
-        if (fullName       is not null) existing.FullName       = fullName;
-        if (status         is not null) existing.Status         = status;
-        if (seniorityLevel is not null) existing.SeniorityLevel = seniorityLevel;
-        if (baseSalary     is not null) existing.BaseSalary     = baseSalary.Value;
+        if (fullName        is not null) existing.FullName        = fullName;
+        if (workEmail       is not null) existing.WorkEmail       = workEmail.ToLowerInvariant();
+        if (status          is not null) existing.Status          = status;
+        if (seniorityLevel  is not null) existing.SeniorityLevel  = seniorityLevel;
+        if (baseSalary      is not null) existing.BaseSalary      = baseSalary.Value;
         if (billingBaseRate is not null) existing.BillingBaseRate = billingBaseRate.Value;
-        if (offboardStr    is not null && DateOnly.TryParse(offboardStr, out var offboard))
+        if (offboardStr     is not null && DateOnly.TryParse(offboardStr, out var offboard))
             existing.OffboardDate = new DateTimeOffset(offboard.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
         await _hrStorage.WriteEmployeeAsync(existing, ct);
         await _embeddings.IndexAsync(existing, ct);
-        return Serialize(new { updated = true, email = existing.RowKey, fullName = existing.FullName, status = existing.Status });
+        return Serialize(new { updated = true, employeeId = existing.RowKey, workEmail = existing.WorkEmail, fullName = existing.FullName, status = existing.Status });
     }
 
     private async Task<string> DeleteEmployeeAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email = ParseStr(call, "email");
-        if (string.IsNullOrWhiteSpace(email)) return "Missing email";
-        await _hrStorage.DeleteEmployeeAsync(email, ct);
-        _cache.RemoveEntry("employee", email.ToLowerInvariant());
-        return Serialize(new { deleted = true, email });
+        var employeeId = ParseStr(call, "employeeId");
+        if (string.IsNullOrWhiteSpace(employeeId)) return "Missing employeeId";
+        await _hrStorage.DeleteEmployeeAsync(employeeId, ct);
+        _cache.RemoveEntry("employee", employeeId);
+        return Serialize(new { deleted = true, employeeId });
+    }
+
+    private async Task<string> LinkAuthIdentityAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var employeeId   = ParseStr(call, "employeeId");
+        var auth0Subject = ParseStr(call, "auth0Subject");
+        var loginEmail   = ParseStr(call, "loginEmail");
+        if (string.IsNullOrWhiteSpace(employeeId)) return "Missing employeeId";
+
+        var existing = await _hrStorage.GetEmployeeAsync(employeeId, ct);
+        if (existing is null) return "Employee not found";
+
+        if (auth0Subject is not null) existing.Auth0Subject = auth0Subject;
+        if (loginEmail   is not null) existing.LoginEmail   = loginEmail.ToLowerInvariant();
+
+        await _hrStorage.WriteEmployeeAsync(existing, ct);
+        await _embeddings.IndexAsync(existing, ct);
+        return Serialize(new { linked = true, employeeId, auth0Subject = existing.Auth0Subject, loginEmail = existing.LoginEmail });
     }
 
     // ── Customer tools ────────────────────────────────────────────────────────
@@ -607,7 +639,7 @@ public class HqChatAgent
             status       = p.Status,
             startDate    = p.StartDate,
             endDate      = p.EndDate,
-            employeeEmails = TryDeserializeStringArray(p.EmployeeEmails),
+            employeeIds  = TryDeserializeStringArray(p.EmployeeIds),
         }));
     }
 
@@ -627,7 +659,7 @@ public class HqChatAgent
             startDate    = p.StartDate,
             endDate      = p.EndDate,
             description  = p.Description,
-            employeeEmails = TryDeserializeStringArray(p.EmployeeEmails),
+            employeeIds  = TryDeserializeStringArray(p.EmployeeIds),
         });
     }
 
@@ -638,24 +670,24 @@ public class HqChatAgent
         if (string.IsNullOrWhiteSpace(name))       return "Missing name";
         if (string.IsNullOrWhiteSpace(customerId)) return "Missing customerId";
 
-        var emails = new List<string>();
+        var ids = new List<string>();
         try
         {
             using var doc = JsonDocument.Parse(call.FunctionArguments);
-            if (doc.RootElement.TryGetProperty("employeeEmails", out var arr))
-                emails = arr.EnumerateArray().Select(e => e.GetString() ?? "")
-                            .Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+            if (doc.RootElement.TryGetProperty("employeeIds", out var arr))
+                ids = arr.EnumerateArray().Select(e => e.GetString() ?? "")
+                         .Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
         }
         catch { }
 
         var entity = new ProjectEntity
         {
-            Name           = name,
-            CustomerId     = customerId,
-            CustomerName   = ParseStr(call, "customerName") ?? "",
-            Status         = "active",
-            Description    = ParseStr(call, "description")  ?? "",
-            EmployeeEmails = JsonSerializer.Serialize(emails),
+            Name         = name,
+            CustomerId   = customerId,
+            CustomerName = ParseStr(call, "customerName") ?? "",
+            Status       = "active",
+            Description  = ParseStr(call, "description")  ?? "",
+            EmployeeIds  = JsonSerializer.Serialize(ids),
         };
 
         var startStr = ParseStr(call, "startDate");
@@ -693,39 +725,39 @@ public class HqChatAgent
         if (endStr      is not null && DateOnly.TryParse(endStr, out var end))
             existing.EndDate = end.ToDateTime(TimeOnly.MinValue);
 
-        // Merge employee email lists
-        var currentEmails = TryDeserializeStringArray(existing.EmployeeEmails)
-            .Select(e => e.ToLowerInvariant()).ToHashSet();
+        // Merge employeeId sets
+        var currentIds = TryDeserializeStringArray(existing.EmployeeIds)
+            .Select(id => id.ToLowerInvariant()).ToHashSet();
 
         try
         {
             using var doc = JsonDocument.Parse(call.FunctionArguments);
-            if (doc.RootElement.TryGetProperty("addEmployeeEmails", out var add))
+            if (doc.RootElement.TryGetProperty("addEmployeeIds", out var add))
                 foreach (var e in add.EnumerateArray())
                 {
-                    var email = e.GetString()?.ToLowerInvariant();
-                    if (!string.IsNullOrWhiteSpace(email)) currentEmails.Add(email);
+                    var id = e.GetString();
+                    if (!string.IsNullOrWhiteSpace(id)) currentIds.Add(id);
                 }
-            if (doc.RootElement.TryGetProperty("removeEmployeeEmails", out var remove))
+            if (doc.RootElement.TryGetProperty("removeEmployeeIds", out var remove))
                 foreach (var e in remove.EnumerateArray())
                 {
-                    var email = e.GetString()?.ToLowerInvariant();
-                    if (!string.IsNullOrWhiteSpace(email)) currentEmails.Remove(email);
+                    var id = e.GetString();
+                    if (!string.IsNullOrWhiteSpace(id)) currentIds.Remove(id);
                 }
         }
         catch { }
 
-        existing.EmployeeEmails = JsonSerializer.Serialize(currentEmails.ToArray());
+        existing.EmployeeIds = JsonSerializer.Serialize(currentIds.ToArray());
 
         await _projectStorage.WriteProjectAsync(existing, ct);
         await _embeddings.IndexAsync(existing, ct);
         return Serialize(new
         {
-            updated        = true,
-            projectId      = existing.RowKey,
-            name           = existing.Name,
-            status         = existing.Status,
-            employeeEmails = currentEmails.ToArray(),
+            updated     = true,
+            projectId   = existing.RowKey,
+            name        = existing.Name,
+            status      = existing.Status,
+            employeeIds = currentIds.ToArray(),
         });
     }
 
@@ -751,7 +783,6 @@ public class HqChatAgent
         var contract = await _contractStorage.GetExtractionAsync(contractId, ct);
         if (contract is null) return "Contract not found";
 
-        // Merge customer into contract's linked lists (idempotent)
         var existingIds   = TryDeserializeStringArray(contract.LinkedCustomerIds).ToList();
         var existingNames = TryDeserializeStringArray(contract.LinkedCustomerNames).ToList();
         if (!existingIds.Contains(customerId, StringComparer.OrdinalIgnoreCase))
@@ -763,7 +794,6 @@ public class HqChatAgent
         await _contractStorage.UpdateLinkedCustomersAsync(contractId, existingIds, existingNames, ct);
         await _customerStorage.LinkContractAsync(customerId, contractId, ct);
 
-        // Re-index both for updated embeddings
         var updated = await _contractStorage.GetExtractionAsync(contractId, ct);
         if (updated is not null) await _embeddings.IndexAsync(updated, ct);
         await _embeddings.IndexAsync(customer, ct);
@@ -782,23 +812,27 @@ public class HqChatAgent
 
     // ── Timereport tools ──────────────────────────────────────────────────────
 
-    private async Task<string> LogTimeAsync(ChatToolCall call, string userId, CancellationToken ct)
+    private async Task<string> LogTimeAsync(ChatToolCall call, string? userEmployeeId, CancellationToken ct)
     {
-        var email     = ParseStr(call, "employeeEmail") ?? userId;
+        var employeeId = ParseStr(call, "employeeId") ?? userEmployeeId ?? "";
+        if (string.IsNullOrWhiteSpace(employeeId)) return "Missing employeeId";
+
         var projectId = ParseStr(call, "projectId");
         if (projectId is null) return "Missing projectId";
 
         var hoursRaw = ParseDouble(call, "hours");
         if (hoursRaw is null) return "Missing hours";
 
-        var note   = ParseStr(call, "note") ?? "";
+        var note    = ParseStr(call, "note") ?? "";
         var dateStr = ParseStr(call, "date");
-        var date   = dateStr is not null && DateOnly.TryParse(dateStr, out var d)
+        var date    = dateStr is not null && DateOnly.TryParse(dateStr, out var d)
             ? d : DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var project = await _projectStorage.GetProjectAsync(projectId, ct);
-        var entry   = await _timereportStorage.LogTimeAsync(
-            email,
+        var employee = await _hrStorage.GetEmployeeAsync(employeeId, ct);
+        var project  = await _projectStorage.GetProjectAsync(projectId, ct);
+        var entry    = await _timereportStorage.LogTimeAsync(
+            employeeId,
+            employee?.WorkEmail ?? "",
             projectId,
             project?.Name ?? projectId,
             project?.CustomerId ?? "",
@@ -810,50 +844,51 @@ public class HqChatAgent
 
         return Serialize(new
         {
-            saved      = true,
-            rowKey     = entry.RowKey,
-            email,
+            saved       = true,
+            rowKey      = entry.RowKey,
+            employeeId,
+            workEmail   = entry.WorkEmail,
             projectId,
             projectName = entry.ProjectName,
-            hours      = entry.Hours,
-            date       = entry.ReportDate,
-            note       = entry.Note,
+            hours       = entry.Hours,
+            date        = entry.ReportDate,
+            note        = entry.Note,
         });
     }
 
     private async Task<string> UpdateTimereportNoteAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email  = ParseStr(call, "employeeEmail");
-        var rowKey = ParseStr(call, "rowKey");
-        var note   = ParseStr(call, "note");
-        if (email is null || rowKey is null || note is null)
-            return "Missing employeeEmail, rowKey, or note";
+        var employeeId = ParseStr(call, "employeeId");
+        var rowKey     = ParseStr(call, "rowKey");
+        var note       = ParseStr(call, "note");
+        if (employeeId is null || rowKey is null || note is null)
+            return "Missing employeeId, rowKey, or note";
 
-        var updated = await _timereportStorage.UpdateNoteAsync(email, rowKey, note, ct);
+        var updated = await _timereportStorage.UpdateNoteAsync(employeeId, rowKey, note, ct);
         return updated ? """{"updated":true}""" : """{"updated":false,"error":"Entry not found"}""";
     }
 
     private async Task<string> DeleteTimereportAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email  = ParseStr(call, "employeeEmail");
-        var rowKey = ParseStr(call, "rowKey");
-        if (email is null || rowKey is null)
-            return "Missing employeeEmail or rowKey";
+        var employeeId = ParseStr(call, "employeeId");
+        var rowKey     = ParseStr(call, "rowKey");
+        if (employeeId is null || rowKey is null)
+            return "Missing employeeId or rowKey";
 
-        var deleted = await _timereportStorage.DeleteAsync(email, rowKey, ct);
+        var deleted = await _timereportStorage.DeleteAsync(employeeId, rowKey, ct);
         return deleted ? """{"deleted":true}""" : """{"deleted":false,"error":"Entry not found"}""";
     }
 
     private async Task<string> QueryHoursAsync(ChatToolCall call, CancellationToken ct)
     {
-        var email      = ParseStr(call, "employeeEmail");
+        var employeeId = ParseStr(call, "employeeId");
         var projectId  = ParseStr(call, "projectId");
         var customerId = ParseStr(call, "customerId");
         var from       = ParseDate(call, "from");
         var to         = ParseDate(call, "to");
 
         var entries = await _timereportStorage.QueryAsync(
-            email, projectId, customerId,
+            employeeId, projectId, customerId,
             from.HasValue ? new DateOnly(from.Value.Year, from.Value.Month, from.Value.Day) : null,
             to.HasValue   ? new DateOnly(to.Value.Year,   to.Value.Month,   to.Value.Day)   : null,
             ct);
@@ -865,11 +900,12 @@ public class HqChatAgent
             entryCount = entries.Count,
             entries    = entries.Select(e => new
             {
-                rowKey   = e.RowKey,
-                date     = e.ReportDate,
-                employee = e.PartitionKey,
-                hours    = e.Hours,
-                note     = e.Note,
+                rowKey     = e.RowKey,
+                date       = e.ReportDate,
+                employeeId = e.PartitionKey,
+                workEmail  = e.WorkEmail,
+                hours      = e.Hours,
+                note       = e.Note,
             }),
         });
     }

@@ -23,9 +23,10 @@ public class HqChatFunction
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "hq-chat")] HttpRequestData req,
         FunctionContext context)
     {
-        var userId    = req.Headers.TryGetValues("X-User-Id",    out var uid)   ? uid.FirstOrDefault()   ?? "" : "";
-        var userEmail = req.Headers.TryGetValues("X-User-Email", out var email) ? email.FirstOrDefault() ?? "" : "";
-        var isAdmin   = req.Headers.TryGetValues("X-User-Role",  out var role)  && role.FirstOrDefault()  == "admin";
+        var userId       = req.Headers.TryGetValues("X-User-Id",    out var uid)   ? uid.FirstOrDefault()   ?? "" : "";
+        var userEmail    = req.Headers.TryGetValues("X-User-Email", out var email) ? email.FirstOrDefault() ?? "" : "";
+        var auth0Subject = req.Headers.TryGetValues("X-User-Sub",   out var sub)   ? sub.FirstOrDefault()   ?? "" : "";
+        var isAdmin      = req.Headers.TryGetValues("X-User-Role",  out var role)  && role.FirstOrDefault()  == "admin";
 
         HqChatRequest? body;
         try { body = await System.Text.Json.JsonSerializer.DeserializeAsync<HqChatRequest>(req.Body); }
@@ -37,7 +38,7 @@ public class HqChatFunction
             return await Plain(req, HttpStatusCode.BadRequest, "sessionId and message are required");
 
         var result = await _agent.ChatAsync(
-            body.SessionId, body.Message, userId, userEmail, isAdmin, context.CancellationToken);
+            body.SessionId, body.Message, userId, userEmail, auth0Subject, isAdmin, context.CancellationToken);
 
         var res = req.CreateResponse();
         await res.WriteAsJsonAsync(new { answer = result.Answer, modelUsed = result.ModelUsed });

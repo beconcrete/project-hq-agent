@@ -18,6 +18,6 @@ public class ProjectEntity : ITableEntity
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
     public string Description { get; set; } = string.Empty;
-    // JSON array of lowercase employee emails
-    public string EmployeeEmails { get; set; } = "[]";
+    // JSON array of employeeId GUIDs
+    public string EmployeeIds { get; set; } = "[]";
 }

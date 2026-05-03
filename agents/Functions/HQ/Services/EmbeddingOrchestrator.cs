@@ -41,11 +41,11 @@ public class EmbeddingOrchestrator
 
     public async Task IndexAsync(ProjectEntity entity, CancellationToken ct)
     {
-        var emails = DeserializeStrings(entity.EmployeeEmails);
-        var names  = new List<string>();
-        foreach (var email in emails)
+        var employeeIds = DeserializeStrings(entity.EmployeeIds);
+        var names       = new List<string>();
+        foreach (var id in employeeIds)
         {
-            var employee = await _hrStorage.GetEmployeeAsync(email, ct);
+            var employee = await _hrStorage.GetEmployeeAsync(id, ct);
             if (employee is not null) names.Add(employee.FullName);
         }
         await IndexCoreAsync("project", entity.RowKey, _textBuilder.Build(entity, names), ct);

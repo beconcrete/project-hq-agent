@@ -45,18 +45,20 @@ public class HqChat
             return await Plain(req, HttpStatusCode.ServiceUnavailable, "HQ agent not configured");
         }
 
-        var userId    = context.Items.TryGetValue("userId",    out var uid)   ? uid?.ToString()   ?? "" : "";
-        var userEmail = context.Items.TryGetValue("userEmail", out var email) ? email?.ToString() ?? "" : "";
-        var isAdmin   = guard.RoleIds.Contains(Roles.Admin);
+        var userId       = context.Items.TryGetValue("userId",       out var uid)  ? uid?.ToString()  ?? "" : "";
+        var userEmail    = context.Items.TryGetValue("userEmail",    out var em)   ? em?.ToString()   ?? "" : "";
+        var auth0Subject = context.Items.TryGetValue("auth0Subject", out var sub)  ? sub?.ToString()  ?? "" : "";
+        var isAdmin      = guard.RoleIds.Contains(Roles.Admin);
 
         using var sr   = new StreamReader(req.Body);
         var body       = await sr.ReadToEndAsync();
 
         using var agentReq = new HttpRequestMessage(HttpMethod.Post, $"{_agentBaseUrl}/api/hq-chat");
-        agentReq.Headers.Add("x-functions-key", _agentKey);
-        agentReq.Headers.Add("X-User-Id",        userId);
-        agentReq.Headers.Add("X-User-Email",      userEmail);
-        agentReq.Headers.Add("X-User-Role",       isAdmin ? "admin" : "user");
+        agentReq.Headers.Add("x-functions-key",  _agentKey);
+        agentReq.Headers.Add("X-User-Id",         userId);
+        agentReq.Headers.Add("X-User-Email",       userEmail);
+        agentReq.Headers.Add("X-User-Sub",         auth0Subject);
+        agentReq.Headers.Add("X-User-Role",        isAdmin ? "admin" : "user");
         agentReq.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
         var http = _httpFactory.CreateClient();

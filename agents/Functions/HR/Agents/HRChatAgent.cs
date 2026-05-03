@@ -212,7 +212,7 @@ public class HRChatAgent
 
         var request = new AddEmployeeRequest(
             FullName: fullName,
-            Email: email,
+            WorkEmail: email,
             StartDate: startDate,
             BaseSalary: baseSalaryStr.Value,
             BillingBaseRate: billingRateStr.Value,
@@ -233,7 +233,7 @@ public class HRChatAgent
 
         var request = new UpdateEmployeeRequest(
             FullName:        ParseArg(call.FunctionArguments, "fullName"),
-            Email:           ParseArg(call.FunctionArguments, "email"),
+            WorkEmail:       ParseArg(call.FunctionArguments, "email"),
             StartDate:       startDate,
             BaseSalary:      ParseDecimalArg(call.FunctionArguments, "baseSalary"),
             BillingBaseRate: ParseDecimalArg(call.FunctionArguments, "billingBaseRate"),

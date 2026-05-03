@@ -29,7 +29,7 @@ public class HRIntelligence : IHRIntelligence
         return employees
             .Where(e =>
                 e.FullName.ToLowerInvariant().Contains(normalized) ||
-                e.Email.ToLowerInvariant().Contains(normalized))
+                e.WorkEmail.ToLowerInvariant().Contains(normalized))
             .Select(ToSummary)
             .ToList();
     }
@@ -40,7 +40,7 @@ public class HRIntelligence : IHRIntelligence
         {
             RowKey          = Guid.NewGuid().ToString(),
             FullName        = request.FullName,
-            Email           = request.Email,
+            WorkEmail       = request.WorkEmail,
             StartDate       = request.StartDate,
             Status          = "active",
             BaseSalary      = (double)request.BaseSalary,
@@ -61,7 +61,7 @@ public class HRIntelligence : IHRIntelligence
         if (entity is null) return null;
 
         if (request.FullName        is not null) entity.FullName        = request.FullName;
-        if (request.Email           is not null) entity.Email           = request.Email;
+        if (request.WorkEmail       is not null) entity.WorkEmail       = request.WorkEmail;
         if (request.StartDate       is not null) entity.StartDate       = request.StartDate.Value;
         if (request.BaseSalary      is not null) entity.BaseSalary      = (double)request.BaseSalary.Value;
         if (request.BillingBaseRate is not null) entity.BillingBaseRate = (double)request.BillingBaseRate.Value;
@@ -123,7 +123,7 @@ public class HRIntelligence : IHRIntelligence
     private static EmployeeSummary ToSummary(EmployeeEntity e) => new(
         EmployeeId:     e.RowKey,
         FullName:       e.FullName,
-        Email:          e.Email,
+        WorkEmail:      e.WorkEmail,
         StartDate:      e.StartDate,
         Status:         e.Status,
         OffboardDate:   e.OffboardDate,

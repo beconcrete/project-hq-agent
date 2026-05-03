@@ -87,24 +87,28 @@ public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        context.Items["userId"]    = me.UserId;
-        context.Items["userEmail"] = ExtractEmailFromJwt(token) ?? "";
+        context.Items["userId"]       = me.UserId;
+        var (email, sub)              = ExtractClaimsFromJwt(token);
+        context.Items["userEmail"]    = email ?? "";
+        context.Items["auth0Subject"] = sub   ?? "";
         await next(context);
     }
 
-    private static string? ExtractEmailFromJwt(string token)
+    private static (string? email, string? sub) ExtractClaimsFromJwt(string token)
     {
         try
         {
             var parts = token.Split('.');
-            if (parts.Length < 2) return null;
+            if (parts.Length < 2) return (null, null);
             var payload = parts[1].Replace('-', '+').Replace('_', '/');
             payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
             var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
             using var doc = System.Text.Json.JsonDocument.Parse(json);
-            return doc.RootElement.TryGetProperty("email", out var v) ? v.GetString() : null;
+            var email = doc.RootElement.TryGetProperty("email", out var ev) ? ev.GetString() : null;
+            var sub   = doc.RootElement.TryGetProperty("sub",   out var sv) ? sv.GetString() : null;
+            return (email, sub);
         }
-        catch { return null; }
+        catch { return (null, null); }
     }
 
     private static async Task WriteResponseAsync(

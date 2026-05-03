@@ -56,16 +56,15 @@ public class ProjectStorageService
         return all.Where(p => p.CustomerId == customerId).ToList();
     }
 
-    public async Task<List<ProjectEntity>> ListByEmployeeAsync(string email, CancellationToken ct = default)
+    public async Task<List<ProjectEntity>> ListByEmployeeAsync(string employeeId, CancellationToken ct = default)
     {
-        var normalizedEmail = email.ToLowerInvariant();
         var all = await ListProjectsAsync(includeClosedProjects: true, ct: ct);
         return all.Where(p =>
         {
             try
             {
-                var emails = JsonSerializer.Deserialize<string[]>(p.EmployeeEmails) ?? [];
-                return emails.Any(e => e.Equals(normalizedEmail, StringComparison.OrdinalIgnoreCase));
+                var ids = JsonSerializer.Deserialize<string[]>(p.EmployeeIds) ?? [];
+                return ids.Any(id => id.Equals(employeeId, StringComparison.OrdinalIgnoreCase));
             }
             catch { return false; }
         }).ToList();

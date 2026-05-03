@@ -3,7 +3,7 @@ namespace HqAgent.Agents.HR.Services;
 public record EmployeeSummary(
     string EmployeeId,
     string FullName,
-    string Email,
+    string WorkEmail,
     DateTimeOffset StartDate,
     string Status,
     DateTimeOffset? OffboardDate,
@@ -30,7 +30,7 @@ public record HRConfigSummary(
 
 public record AddEmployeeRequest(
     string FullName,
-    string Email,
+    string WorkEmail,
     DateTimeOffset StartDate,
     decimal BaseSalary,
     decimal BillingBaseRate,
@@ -39,7 +39,7 @@ public record AddEmployeeRequest(
 
 public record UpdateEmployeeRequest(
     string? FullName = null,
-    string? Email = null,
+    string? WorkEmail = null,
     DateTimeOffset? StartDate = null,
     decimal? BaseSalary = null,
     decimal? BillingBaseRate = null,
