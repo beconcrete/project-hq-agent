@@ -36,8 +36,10 @@ public class HqChatAgent
 
         Only skip search_entities when:
         - The user asks for a full list with no filter ("list all projects", "show all employees")
-        - You already have an ID from a previous tool result in this conversation
-        - It is a time reporting write operation (log_time, update_timereport_note, delete_timereport)
+        - It is update_timereport_note or delete_timereport (rowKey already known from a prior log_time result)
+
+        For log_time: ALWAYS call search_entities to resolve the project name to a projectId first,
+        even if the project was just created in this conversation. Never pass a projectId from memory.
 
         NEVER pass a human-readable name to a tool that expects an ID — it will always return empty results.
 
@@ -677,6 +679,8 @@ public class HqChatAgent
         var customerId = ParseStr(call, "customerId");
         if (string.IsNullOrWhiteSpace(name))       return "Missing name";
         if (string.IsNullOrWhiteSpace(customerId)) return "Missing customerId";
+        if (!Guid.TryParse(customerId, out _))
+            return $"Invalid customerId '{customerId}' — must be a valid GUID. Call search_entities then get_customer to obtain the correct ID.";
 
         var ids = new List<string>();
         try
@@ -841,17 +845,20 @@ public class HqChatAgent
         var project  = await _projectStorage.GetProjectAsync(projectId, ct);
 
         if (project is null)
-            _logger.LogWarning("log_time: project {ProjectId} not found — customerId/customerName will be empty", projectId);
-        else if (string.IsNullOrEmpty(project.CustomerId))
+        {
+            _logger.LogWarning("log_time: project {ProjectId} not found", projectId);
+            return $"Project '{projectId}' not found. Call search_entities to resolve the correct projectId before calling log_time.";
+        }
+        if (string.IsNullOrEmpty(project.CustomerId))
             _logger.LogWarning("log_time: project {ProjectId} ({Name}) has empty CustomerId", projectId, project.Name);
 
         var entry    = await _timereportStorage.LogTimeAsync(
             employeeId,
             employee?.WorkEmail ?? "",
             projectId,
-            project?.Name ?? projectId,
-            project?.CustomerId ?? "",
-            project?.CustomerName ?? "",
+            project.Name,
+            project.CustomerId,
+            project.CustomerName,
             hoursRaw.Value,
             note,
             date,
