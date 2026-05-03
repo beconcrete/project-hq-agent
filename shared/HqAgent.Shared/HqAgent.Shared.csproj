@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Azure.Data.Tables" Version="12.9.1" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.22.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="*" />
   </ItemGroup>
 
   <ItemGroup>
