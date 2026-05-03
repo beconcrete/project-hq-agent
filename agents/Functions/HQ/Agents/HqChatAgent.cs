@@ -839,6 +839,12 @@ public class HqChatAgent
 
         var employee = await _hrStorage.GetEmployeeAsync(employeeId, ct);
         var project  = await _projectStorage.GetProjectAsync(projectId, ct);
+
+        if (project is null)
+            _logger.LogWarning("log_time: project {ProjectId} not found — customerId/customerName will be empty", projectId);
+        else if (string.IsNullOrEmpty(project.CustomerId))
+            _logger.LogWarning("log_time: project {ProjectId} ({Name}) has empty CustomerId", projectId, project.Name);
+
         var entry    = await _timereportStorage.LogTimeAsync(
             employeeId,
             employee?.WorkEmail ?? "",
@@ -853,15 +859,17 @@ public class HqChatAgent
 
         return Serialize(new
         {
-            saved       = true,
-            rowKey      = entry.RowKey,
+            saved        = true,
+            rowKey       = entry.RowKey,
             employeeId,
-            workEmail   = entry.WorkEmail,
+            workEmail    = entry.WorkEmail,
             projectId,
-            projectName = entry.ProjectName,
-            hours       = entry.Hours,
-            date        = entry.ReportDate,
-            note        = entry.Note,
+            projectName  = entry.ProjectName,
+            customerId   = entry.CustomerId,
+            customerName = entry.CustomerName,
+            hours        = entry.Hours,
+            date         = entry.ReportDate,
+            note         = entry.Note,
         });
     }
 
@@ -909,12 +917,16 @@ public class HqChatAgent
             entryCount = entries.Count,
             entries    = entries.Select(e => new
             {
-                rowKey     = e.RowKey,
-                date       = e.ReportDate,
-                employeeId = e.PartitionKey,
-                workEmail  = e.WorkEmail,
-                hours      = e.Hours,
-                note       = e.Note,
+                rowKey       = e.RowKey,
+                date         = e.ReportDate,
+                employeeId   = e.PartitionKey,
+                workEmail    = e.WorkEmail,
+                projectId    = e.ProjectId,
+                projectName  = e.ProjectName,
+                customerId   = e.CustomerId,
+                customerName = e.CustomerName,
+                hours        = e.Hours,
+                note         = e.Note,
             }),
         });
     }
