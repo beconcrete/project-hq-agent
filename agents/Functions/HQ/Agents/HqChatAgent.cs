@@ -30,9 +30,15 @@ public class HqChatAgent
         CUSTOMERS: Use customer tools to list customers, look up a specific customer, or create a new customer.
         When creating a customer only the name is required; ask for optional fields if you have them.
 
+        ID RESOLUTION — mandatory before calling any tool that requires an ID parameter:
+        - customerId: call get_customer(name) first to resolve the name to an ID.
+          Apply this for list_projects_by_customer, query_hours, and any other tool taking customerId.
+        - projectId: call list_projects first and match by name to get the ID.
+        - employeeEmail: use the email directly if known; call list_employees if only a name is given.
+        NEVER pass a human-readable name where a tool expects an ID — the lookup will return empty results.
+
         PROJECTS: Use project tools to list projects, get project details, find projects by customer or employee,
-        or create a new project. To create a project you need a name and a customer — resolve the customer by
-        name first if the user gives a customer name instead of an ID.
+        or create a new project. When the user names a customer, resolve it to an ID via get_customer first.
         To add or remove employees from an existing project, ALWAYS use update_project with addEmployeeEmails
         or removeEmployeeEmails. NEVER call create_project to modify an existing project.
 
@@ -42,6 +48,7 @@ public class HqChatAgent
         TIME REPORTING — conversational flow:
         1. When the user reports time (e.g. "report 2 hours on project X"), call log_time.
            If the project is named (not an ID), call list_projects first to resolve it.
+           If the customer is named (not an ID), call get_customer first to resolve it.
         2. After saving, respond: "Done — X hours logged on [Project] for [date]. What did you work on today?"
            Include the rowKey in your response so you can update the note in the next turn.
         3. When the user replies with what they did, call update_timereport_note with the rowKey from step 2.
