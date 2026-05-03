@@ -30,6 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.SHARED_REPO_TOKEN }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -48,6 +49,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          token: ${{ secrets.SHARED_REPO_TOKEN }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
