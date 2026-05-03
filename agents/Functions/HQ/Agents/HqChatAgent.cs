@@ -33,6 +33,8 @@ public class HqChatAgent
         PROJECTS: Use project tools to list projects, get project details, find projects by customer or employee,
         or create a new project. To create a project you need a name and a customer — resolve the customer by
         name first if the user gives a customer name instead of an ID.
+        To add or remove employees from an existing project, ALWAYS use update_project with addEmployeeEmails
+        or removeEmployeeEmails. NEVER call create_project to modify an existing project.
 
         EMPLOYEES: When creating an employee, email and full name are required; other fields are optional.
         Resolve project names to IDs using list_projects before calling any project-specific tool.
@@ -127,8 +129,11 @@ public class HqChatAgent
             "List all projects an employee is assigned to, by email.",
             BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
         ChatTool.CreateFunctionTool("create_project",
-            "Create a new project. Name and customerId are required. Resolve the customer by name first if needed.",
+            "Create a new project. Name and customerId are required. Resolve the customer by name first if needed. NEVER call this to add an employee to an existing project — use update_project instead.",
             BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"customerId":{"type":"string"},"customerName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"description":{"type":"string"},"employeeEmails":{"type":"array","items":{"type":"string"}}},"required":["name","customerId"]}""")),
+        ChatTool.CreateFunctionTool("update_project",
+            "Update an existing project. Only the fields you provide are changed; omitted fields are left as-is. To add employees, pass addEmployeeEmails. To remove employees, pass removeEmployeeEmails. Never use create_project for updates.",
+            BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"},"name":{"type":"string"},"status":{"type":"string","enum":["active","closed"]},"description":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"addEmployeeEmails":{"type":"array","items":{"type":"string"},"description":"Emails to add to the project team"},"removeEmployeeEmails":{"type":"array","items":{"type":"string"},"description":"Emails to remove from the project team"}},"required":["projectId"]}""")),
 
         // Cross-entity search
         ChatTool.CreateFunctionTool("search_entities",
@@ -279,6 +284,7 @@ public class HqChatAgent
             "list_projects_by_customer" => await ListProjectsByCustomerAsync(call, ct),
             "list_projects_by_employee" => await ListProjectsByEmployeeAsync(call, ct),
             "create_project"            => await CreateProjectAsync(call, ct),
+            "update_project"            => await UpdateProjectAsync(call, ct),
 
             // Timereports
             "log_time"               => await LogTimeAsync(call, userId, ct),
@@ -604,6 +610,64 @@ public class HqChatAgent
         await _projectStorage.WriteProjectAsync(entity, ct);
         await _embeddings.IndexAsync(entity, ct);
         return Serialize(new { created = true, projectId = entity.RowKey, name = entity.Name, customerId });
+    }
+
+    private async Task<string> UpdateProjectAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var projectId = ParseStr(call, "projectId");
+        if (string.IsNullOrWhiteSpace(projectId)) return "Missing projectId";
+
+        var existing = await _projectStorage.GetProjectAsync(projectId, ct);
+        if (existing is null) return "Project not found";
+
+        var name        = ParseStr(call, "name");
+        var status      = ParseStr(call, "status");
+        var description = ParseStr(call, "description");
+        var startStr    = ParseStr(call, "startDate");
+        var endStr      = ParseStr(call, "endDate");
+
+        if (name        is not null) existing.Name        = name;
+        if (status      is not null) existing.Status      = status;
+        if (description is not null) existing.Description = description;
+        if (startStr    is not null && DateOnly.TryParse(startStr, out var start))
+            existing.StartDate = start.ToDateTime(TimeOnly.MinValue);
+        if (endStr      is not null && DateOnly.TryParse(endStr, out var end))
+            existing.EndDate = end.ToDateTime(TimeOnly.MinValue);
+
+        // Merge employee email lists
+        var currentEmails = TryDeserializeStringArray(existing.EmployeeEmails)
+            .Select(e => e.ToLowerInvariant()).ToHashSet();
+
+        try
+        {
+            using var doc = JsonDocument.Parse(call.FunctionArguments);
+            if (doc.RootElement.TryGetProperty("addEmployeeEmails", out var add))
+                foreach (var e in add.EnumerateArray())
+                {
+                    var email = e.GetString()?.ToLowerInvariant();
+                    if (!string.IsNullOrWhiteSpace(email)) currentEmails.Add(email);
+                }
+            if (doc.RootElement.TryGetProperty("removeEmployeeEmails", out var remove))
+                foreach (var e in remove.EnumerateArray())
+                {
+                    var email = e.GetString()?.ToLowerInvariant();
+                    if (!string.IsNullOrWhiteSpace(email)) currentEmails.Remove(email);
+                }
+        }
+        catch { }
+
+        existing.EmployeeEmails = JsonSerializer.Serialize(currentEmails.ToArray());
+
+        await _projectStorage.WriteProjectAsync(existing, ct);
+        await _embeddings.IndexAsync(existing, ct);
+        return Serialize(new
+        {
+            updated        = true,
+            projectId      = existing.RowKey,
+            name           = existing.Name,
+            status         = existing.Status,
+            employeeEmails = currentEmails.ToArray(),
+        });
     }
 
     // ── Timereport tools ──────────────────────────────────────────────────────
