@@ -688,11 +688,12 @@ public class HqChatAgent
         }
         catch { }
 
+        var customer = await _customerStorage.GetCustomerAsync(customerId, ct);
         var entity = new ProjectEntity
         {
             Name         = name,
             CustomerId   = customerId,
-            CustomerName = ParseStr(call, "customerName") ?? "",
+            CustomerName = customer?.Name ?? ParseStr(call, "customerName") ?? "",
             Status       = "active",
             Description  = ParseStr(call, "description")  ?? "",
             EmployeeIds  = JsonSerializer.Serialize(ids),
