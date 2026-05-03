@@ -225,7 +225,16 @@ public class HqChatAgent
         var caller  = new ContractCallerContext(userId, isAdmin);
         var history = await LoadHistoryAsync(userId, sessionId, ct);
 
-        var messages = new List<ChatMessage> { ChatMessage.CreateSystemMessage(SystemPrompt) };
+        var userEmployee = await _hrStorage.GetEmployeeAsync(userId, ct);
+        var userContext  = userEmployee is not null
+            ? $"The signed-in user is {userEmployee.FullName} (email: {userId}{(isAdmin ? ", role: admin" : "")})."
+            : $"The signed-in user has email {userId}{(isAdmin ? " (admin)" : "")}.";
+
+        var messages = new List<ChatMessage>
+        {
+            ChatMessage.CreateSystemMessage(SystemPrompt),
+            ChatMessage.CreateSystemMessage(userContext),
+        };
         foreach (var turn in history)
         {
             messages.Add(turn.Role == "user"

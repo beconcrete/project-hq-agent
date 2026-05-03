@@ -232,7 +232,7 @@ async function sendMessage() {
   } finally {
     chatPending.value = false;
     await nextTick();
-    chatInputEl.value?.focus();
+    requestAnimationFrame(() => chatInputEl.value?.focus());
   }
 }
 
