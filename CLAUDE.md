@@ -219,7 +219,9 @@ See [docs/MAF.md](./docs/MAF.md) for patterns, gotchas, and working examples cov
 
 **Primary user-facing agent: `HqChatAgent`** (`agents/Functions/HQ/Agents/HqChatAgent.cs`)
 - Direct OpenAI tool-calling loop (same pattern as `ContractChatAgent`) — not MAF.
-- Tool registry spanning all domains: Contracts, Employees, Customers, Projects, Timereports.
+- `search_entities` is the primary entry point for all name-based queries. The agent calls it first whenever the user mentions a name (customer, project, person, contract), retrieves the entityId, and uses it in follow-up domain tools. Users never work with IDs directly.
+- Tool registry: `search_entities` (primary), `get_*` (full detail fetch), `list_*` (enumerate all), `create_*` / `update_*` (writes), `find_expiring_contracts` / `find_renewal_windows` (date-range contract queries), `query_hours` / `log_time` / `update_timereport_note` / `delete_timereport` (time reporting).
+- Removed name-based lookup tools superseded by `search_entities`: `find_contracts_by_person`, `find_contracts_by_counterparty`, `find_employees_by_project`, `list_projects_by_customer`, `list_projects_by_employee`.
 - Conversational time reporting: `log_time` saves an entry and prompts for a note; `update_timereport_note` patches it on the next turn using the returned `rowKey`.
 - Chat history in `HQChatHistory`: `PartitionKey = userId`, `RowKey = {sessionId}_{ticks:D20}`.
 - Exposed via `HqChatFunction` HTTP trigger at `POST /api/hq-chat` (function auth, called by `api/HqChat.cs` proxy).

@@ -79,12 +79,6 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("find_renewal_windows",
             "Find contracts with upcoming notice deadlines or renewal windows.",
             BinaryData.FromString("""{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"}},"required":[]}""")),
-        ChatTool.CreateFunctionTool("find_contracts_by_person",
-            "Find contracts that mention or affect a named employee, consultant, or signatory.",
-            BinaryData.FromString("""{"type":"object","properties":{"personName":{"type":"string"}},"required":["personName"]}""")),
-        ChatTool.CreateFunctionTool("find_contracts_by_counterparty",
-            "Find contracts by customer, supplier, or other counterparty name.",
-            BinaryData.FromString("""{"type":"object","properties":{"counterparty":{"type":"string"}},"required":["counterparty"]}""")),
         ChatTool.CreateFunctionTool("get_contract",
             "Get normalized facts and extracted fields for a specific contract by its ID.",
             BinaryData.FromString("""{"type":"object","properties":{"contractId":{"type":"string"}},"required":["contractId"]}""")),
@@ -99,10 +93,6 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("create_employee",
             "Create or update an employee record. Email and fullName are required.",
             BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"},"fullName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"}},"required":["email","fullName"]}""")),
-        ChatTool.CreateFunctionTool("find_employees_by_project",
-            "Find employees assigned to a specific project by project ID.",
-            BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"}},"required":["projectId"]}""")),
-
         // Customers
         ChatTool.CreateFunctionTool("list_customers",
             "List all customers.",
@@ -121,12 +111,6 @@ public class HqChatAgent
         ChatTool.CreateFunctionTool("get_project",
             "Get details for a specific project by ID.",
             BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"}},"required":["projectId"]}""")),
-        ChatTool.CreateFunctionTool("list_projects_by_customer",
-            "List all projects for a given customer ID.",
-            BinaryData.FromString("""{"type":"object","properties":{"customerId":{"type":"string"}},"required":["customerId"]}""")),
-        ChatTool.CreateFunctionTool("list_projects_by_employee",
-            "List all projects an employee is assigned to, by email.",
-            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
         ChatTool.CreateFunctionTool("create_project",
             "Create a new project. Name and customerId are required. Resolve the customer by name first if needed. NEVER call this to add an employee to an existing project — use update_project instead.",
             BinaryData.FromString("""{"type":"object","properties":{"name":{"type":"string"},"customerId":{"type":"string"},"customerName":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"description":{"type":"string"},"employeeEmails":{"type":"array","items":{"type":"string"}}},"required":["name","customerId"]}""")),
@@ -136,8 +120,8 @@ public class HqChatAgent
 
         // Cross-entity search
         ChatTool.CreateFunctionTool("search_entities",
-            "Semantic search across all entity types (employees, customers, projects, contracts). Use for cross-domain discovery questions where you don't know which domain holds the answer.",
-            BinaryData.FromString("""{"type":"object","properties":{"query":{"type":"string","description":"Natural language search query"},"limit":{"type":"integer","description":"Max results to return, default 15"}},"required":["query"]}""")),
+            "Primary name resolution and discovery tool. Call this whenever the user mentions any name (person, customer, project, contract). Returns ranked hits with entityType and entityId across all domains. Use the returned IDs for follow-up get_* or query_* calls.",
+            BinaryData.FromString("""{"type":"object","properties":{"query":{"type":"string","description":"Natural language search query — use the name or description the user provided"},"limit":{"type":"integer","description":"Max results to return, default 15"}},"required":["query"]}""")),
 
         // Timereports
         ChatTool.CreateFunctionTool("log_time",
@@ -262,14 +246,11 @@ public class HqChatAgent
             "list_contracts"            => await ListContractsAsync(caller, ct),
             "find_expiring_contracts"   => await FindExpiringAsync(call, caller, ct),
             "find_renewal_windows"      => await FindRenewalWindowsAsync(call, caller, ct),
-            "find_contracts_by_person"  => await FindByPersonAsync(call, caller, ct),
-            "find_contracts_by_counterparty" => await FindByCounterpartyAsync(call, caller, ct),
             "get_contract"              => await GetContractAsync(call, caller, ct),
 
             // Employees
             "list_employees"            => await ListEmployeesAsync(call, ct),
             "get_employee"              => await GetEmployeeAsync(call, ct),
-            "find_employees_by_project" => await FindEmployeesByProjectAsync(call, ct),
             "create_employee"           => await CreateEmployeeAsync(call, ct),
 
             // Customers
@@ -280,8 +261,6 @@ public class HqChatAgent
             // Projects
             "list_projects"             => await ListProjectsAsync(call, ct),
             "get_project"               => await GetProjectAsync(call, ct),
-            "list_projects_by_customer" => await ListProjectsByCustomerAsync(call, ct),
-            "list_projects_by_employee" => await ListProjectsByEmployeeAsync(call, ct),
             "create_project"            => await CreateProjectAsync(call, ct),
             "update_project"            => await UpdateProjectAsync(call, ct),
 
@@ -340,22 +319,6 @@ public class HqChatAgent
         return Serialize(items);
     }
 
-    private async Task<string> FindByPersonAsync(ChatToolCall call, ContractCallerContext caller, CancellationToken ct)
-    {
-        var name = ParseStr(call, "personName");
-        if (name is null) return "Missing personName";
-        var items = await _contracts.FindByPersonAsync(caller, name, ct);
-        return Serialize(items);
-    }
-
-    private async Task<string> FindByCounterpartyAsync(ChatToolCall call, ContractCallerContext caller, CancellationToken ct)
-    {
-        var cp    = ParseStr(call, "counterparty");
-        if (cp is null) return "Missing counterparty";
-        var items = await _contracts.FindByCounterpartyAsync(caller, cp, ct);
-        return Serialize(items);
-    }
-
     private async Task<string> GetContractAsync(ChatToolCall call, ContractCallerContext caller, CancellationToken ct)
     {
         var id = ParseStr(call, "contractId");
@@ -408,27 +371,6 @@ public class HqChatAgent
             billingBaseRate = e.BillingBaseRate,
             vacationBalance = e.VacationBalance,
         });
-    }
-
-    private async Task<string> FindEmployeesByProjectAsync(ChatToolCall call, CancellationToken ct)
-    {
-        var projectId = ParseStr(call, "projectId");
-        if (projectId is null) return "Missing projectId";
-        var project = await _projectStorage.GetProjectAsync(projectId, ct);
-        if (project is null) return "Project not found";
-
-        string[] emails;
-        try { emails = JsonSerializer.Deserialize<string[]>(project.EmployeeEmails) ?? []; }
-        catch { emails = []; }
-
-        var employees = new List<object>();
-        foreach (var email in emails)
-        {
-            var e = await _hrStorage.GetEmployeeAsync(email, ct);
-            if (e is not null)
-                employees.Add(new { email = e.RowKey, name = e.FullName, status = e.Status });
-        }
-        return Serialize(employees);
     }
 
     private async Task<string> CreateEmployeeAsync(ChatToolCall call, CancellationToken ct)
@@ -553,22 +495,6 @@ public class HqChatAgent
             description  = p.Description,
             employeeEmails = TryDeserializeStringArray(p.EmployeeEmails),
         });
-    }
-
-    private async Task<string> ListProjectsByCustomerAsync(ChatToolCall call, CancellationToken ct)
-    {
-        var customerId = ParseStr(call, "customerId");
-        if (customerId is null) return "Missing customerId";
-        var projects = await _projectStorage.ListByCustomerAsync(customerId, ct);
-        return Serialize(projects.Select(p => new { projectId = p.RowKey, p.Name, p.Status }));
-    }
-
-    private async Task<string> ListProjectsByEmployeeAsync(ChatToolCall call, CancellationToken ct)
-    {
-        var email = ParseStr(call, "email");
-        if (email is null) return "Missing email";
-        var projects = await _projectStorage.ListByEmployeeAsync(email, ct);
-        return Serialize(projects.Select(p => new { projectId = p.RowKey, p.Name, p.Status }));
     }
 
     private async Task<string> CreateProjectAsync(ChatToolCall call, CancellationToken ct)
