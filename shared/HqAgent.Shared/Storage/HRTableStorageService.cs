@@ -21,7 +21,8 @@ public class HRTableStorageService
         await table.CreateIfNotExistsAsync(ct);
 
         var results = new List<EmployeeEntity>();
-        await foreach (var entity in table.QueryAsync<EmployeeEntity>(cancellationToken: ct))
+        await foreach (var entity in table.QueryAsync<EmployeeEntity>(
+            filter: "PartitionKey eq 'employees'", cancellationToken: ct))
         {
             if (!includeOffboarded && entity.Status == "offboarded")
                 continue;
