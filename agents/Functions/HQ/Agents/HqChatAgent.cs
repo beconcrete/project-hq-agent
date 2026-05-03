@@ -41,6 +41,13 @@ public class HqChatAgent
 
         NEVER pass a human-readable name to a tool that expects an ID — it will always return empty results.
 
+        SEARCH RESULTS ARE HINTS, NOT FACTS:
+        search_entities returns similarity matches from an index that may be stale. A search hit does
+        NOT confirm an entity exists. Before telling the user something exists, or blocking a create
+        because of a name clash, ALWAYS verify with the appropriate get_* tool (get_project, get_customer,
+        get_employee, get_contract). If get_* returns "not found", the search result is stale — ignore it
+        and proceed (e.g. go ahead and create the project the user asked for).
+
         CONTRACTS: Use contract tools to answer questions about agreements, expiry dates, notice periods,
         renewal windows, payment terms, counterparties, people, and consulting assignments.
         Deleted or rejected contracts are not active and must not be treated as available agreements.
