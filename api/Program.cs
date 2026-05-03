@@ -1,5 +1,6 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
+using BeConcrete.EmbeddingCore.Storage;
 using HqAgent.Api.Middleware;
 using HqAgent.Shared.Storage;
 using Microsoft.Extensions.Logging;

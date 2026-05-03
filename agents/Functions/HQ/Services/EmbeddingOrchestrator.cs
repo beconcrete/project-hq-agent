@@ -1,4 +1,7 @@
 using System.Text.Json;
+using BeConcrete.EmbeddingCore.Models;
+using BeConcrete.EmbeddingCore.Services;
+using BeConcrete.EmbeddingCore.Storage;
 using HqAgent.Shared.Models;
 using HqAgent.Shared.Storage;
 using Microsoft.Extensions.Logging;

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Azure;
 using Azure.Data.Tables;
+using BeConcrete.EmbeddingCore.Services;
 using HqAgent.Agents.Contract.Services;
 using HqAgent.Agents.HQ.Services;
 using HqAgent.Shared.Models;

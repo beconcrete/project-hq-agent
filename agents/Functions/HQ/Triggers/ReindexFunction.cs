@@ -1,4 +1,6 @@
 using System.Net;
+using BeConcrete.EmbeddingCore.Services;
+using BeConcrete.EmbeddingCore.Storage;
 using HqAgent.Agents.HQ.Services;
 using HqAgent.Shared.Storage;
 using Microsoft.Azure.Functions.Worker;

@@ -1,5 +1,7 @@
 using Azure.Data.Tables;
 using Azure.Storage.Blobs;
+using BeConcrete.EmbeddingCore.Services;
+using BeConcrete.EmbeddingCore.Storage;
 using HqAgent.Agents.Contract.Agents;
 using HqAgent.Agents.Contract.Services;
 using HqAgent.Agents.HQ.Agents;

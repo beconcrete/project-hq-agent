@@ -14,5 +14,4 @@ public static class TableNames
     public const string HRChatHistory            = "HRChatHistory";
     public const string ContractChatHistory      = "ContractChatHistory";
     public const string SalesForecastChatHistory = "SalesForecastChatHistory";
-    public const string Embeddings              = "Embeddings";
 }

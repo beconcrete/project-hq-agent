@@ -1,0 +1,3 @@
+[submodule "shared/project-shared"]
+	path = shared/project-shared
+	url = https://github.com/beconcrete/project-shared.git
