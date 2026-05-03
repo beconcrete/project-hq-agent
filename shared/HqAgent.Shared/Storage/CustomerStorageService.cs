@@ -110,6 +110,14 @@ public class CustomerStorageService
         _logger.LogInformation("Linked contract {ContractId} to customer {CustomerId}", contractId, customerId);
     }
 
+    public async Task DeleteCustomerAsync(string customerId, CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Customers);
+        try { await table.DeleteEntityAsync("customers", customerId, cancellationToken: ct); }
+        catch (RequestFailedException ex) when (ex.Status == 404) { }
+        _logger.LogInformation("Deleted customer {CustomerId}", customerId);
+    }
+
     public async Task WriteCustomerAsync(CustomerEntity entity, CancellationToken ct = default)
     {
         var table = _client.GetTableClient(TableNames.Customers);

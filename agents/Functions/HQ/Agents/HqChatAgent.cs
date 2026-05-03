@@ -122,6 +122,35 @@ public class HqChatAgent
             "Update an existing project. Only the fields you provide are changed; omitted fields are left as-is. To add employees, pass addEmployeeEmails. To remove employees, pass removeEmployeeEmails. Never use create_project for updates.",
             BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"},"name":{"type":"string"},"status":{"type":"string","enum":["active","closed"]},"description":{"type":"string"},"startDate":{"type":"string","description":"ISO yyyy-MM-dd"},"endDate":{"type":"string","description":"ISO yyyy-MM-dd"},"addEmployeeEmails":{"type":"array","items":{"type":"string"},"description":"Emails to add to the project team"},"removeEmployeeEmails":{"type":"array","items":{"type":"string"},"description":"Emails to remove from the project team"}},"required":["projectId"]}""")),
 
+        // Employees (continued)
+        ChatTool.CreateFunctionTool("update_employee",
+            "Update fields on an existing employee. Only the fields you provide are changed. Use status='offboarded' when an employee leaves.",
+            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"},"fullName":{"type":"string"},"status":{"type":"string","enum":["active","offboarded"]},"baseSalary":{"type":"number"},"billingBaseRate":{"type":"number"},"seniorityLevel":{"type":"string"},"offboardDate":{"type":"string","description":"ISO yyyy-MM-dd"}},"required":["email"]}""")),
+        ChatTool.CreateFunctionTool("delete_employee",
+            "Permanently delete an employee record by email.",
+            BinaryData.FromString("""{"type":"object","properties":{"email":{"type":"string"}},"required":["email"]}""")),
+
+        // Customers (continued)
+        ChatTool.CreateFunctionTool("update_customer",
+            "Update fields on an existing customer. Only the fields you provide are changed.",
+            BinaryData.FromString("""{"type":"object","properties":{"customerId":{"type":"string"},"name":{"type":"string"},"orgNumber":{"type":"string"},"country":{"type":"string"},"primaryContactName":{"type":"string"},"primaryContactEmail":{"type":"string"},"notes":{"type":"string"},"status":{"type":"string","enum":["active","inactive"]}},"required":["customerId"]}""")),
+        ChatTool.CreateFunctionTool("delete_customer",
+            "Permanently delete a customer record by ID.",
+            BinaryData.FromString("""{"type":"object","properties":{"customerId":{"type":"string"}},"required":["customerId"]}""")),
+
+        // Projects (continued)
+        ChatTool.CreateFunctionTool("delete_project",
+            "Permanently delete a project by ID.",
+            BinaryData.FromString("""{"type":"object","properties":{"projectId":{"type":"string"}},"required":["projectId"]}""")),
+
+        // Contracts (continued)
+        ChatTool.CreateFunctionTool("link_contract_to_customer",
+            "Link a contract to a customer. Use this when the agent identifies which customer a contract belongs to. Resolves IDs via search_entities first.",
+            BinaryData.FromString("""{"type":"object","properties":{"contractId":{"type":"string"},"customerId":{"type":"string"}},"required":["contractId","customerId"]}""")),
+        ChatTool.CreateFunctionTool("delete_contract",
+            "Permanently delete a contract record by ID. Use when the user wants to remove a duplicate or superseded version.",
+            BinaryData.FromString("""{"type":"object","properties":{"contractId":{"type":"string"}},"required":["contractId"]}""")),
+
         // Cross-entity search
         ChatTool.CreateFunctionTool("search_entities",
             "Primary name resolution and discovery tool. Call this whenever the user mentions any name (person, customer, project, contract). Returns ranked hits with entityType and entityId across all domains. Use the returned IDs for follow-up get_* or query_* calls.",
@@ -145,6 +174,7 @@ public class HqChatAgent
     private readonly ChatClient _chatClient;
     private readonly TableServiceClient _tableClient;
     private readonly IContractIntelligence _contracts;
+    private readonly TableStorageService _contractStorage;
     private readonly HRTableStorageService _hrStorage;
     private readonly CustomerStorageService _customerStorage;
     private readonly ProjectStorageService _projectStorage;
@@ -157,6 +187,7 @@ public class HqChatAgent
     public HqChatAgent(
         TableServiceClient       tableClient,
         IContractIntelligence    contracts,
+        TableStorageService      contractStorage,
         HRTableStorageService    hrStorage,
         CustomerStorageService   customerStorage,
         ProjectStorageService    projectStorage,
@@ -169,6 +200,7 @@ public class HqChatAgent
     {
         _tableClient       = tableClient;
         _contracts         = contracts;
+        _contractStorage   = contractStorage;
         _hrStorage         = hrStorage;
         _customerStorage   = customerStorage;
         _projectStorage    = projectStorage;
@@ -256,17 +288,26 @@ public class HqChatAgent
             "list_employees"            => await ListEmployeesAsync(call, ct),
             "get_employee"              => await GetEmployeeAsync(call, ct),
             "create_employee"           => await CreateEmployeeAsync(call, ct),
+            "update_employee"           => await UpdateEmployeeAsync(call, ct),
+            "delete_employee"           => await DeleteEmployeeAsync(call, ct),
 
             // Customers
             "list_customers"            => await ListCustomersAsync(call, ct),
             "get_customer"              => await GetCustomerAsync(call, ct),
             "create_customer"           => await CreateCustomerAsync(call, ct),
+            "update_customer"           => await UpdateCustomerAsync(call, ct),
+            "delete_customer"           => await DeleteCustomerAsync(call, ct),
 
             // Projects
             "list_projects"             => await ListProjectsAsync(call, ct),
             "get_project"               => await GetProjectAsync(call, ct),
             "create_project"            => await CreateProjectAsync(call, ct),
             "update_project"            => await UpdateProjectAsync(call, ct),
+            "delete_project"            => await DeleteProjectAsync(call, ct),
+
+            // Contracts (continued)
+            "link_contract_to_customer" => await LinkContractToCustomerAsync(call, ct),
+            "delete_contract"           => await DeleteContractAsync(call, ct),
 
             // Timereports
             "log_time"               => await LogTimeAsync(call, userId, ct),
@@ -404,6 +445,43 @@ public class HqChatAgent
         return Serialize(new { created = true, email = entity.Email, fullName = entity.FullName });
     }
 
+    private async Task<string> UpdateEmployeeAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var email = ParseStr(call, "email");
+        if (string.IsNullOrWhiteSpace(email)) return "Missing email";
+
+        var existing = await _hrStorage.GetEmployeeAsync(email, ct);
+        if (existing is null) return "Employee not found";
+
+        var fullName        = ParseStr(call, "fullName");
+        var status          = ParseStr(call, "status");
+        var seniorityLevel  = ParseStr(call, "seniorityLevel");
+        var baseSalary      = ParseDouble(call, "baseSalary");
+        var billingBaseRate = ParseDouble(call, "billingBaseRate");
+        var offboardStr     = ParseStr(call, "offboardDate");
+
+        if (fullName       is not null) existing.FullName       = fullName;
+        if (status         is not null) existing.Status         = status;
+        if (seniorityLevel is not null) existing.SeniorityLevel = seniorityLevel;
+        if (baseSalary     is not null) existing.BaseSalary     = baseSalary.Value;
+        if (billingBaseRate is not null) existing.BillingBaseRate = billingBaseRate.Value;
+        if (offboardStr    is not null && DateOnly.TryParse(offboardStr, out var offboard))
+            existing.OffboardDate = new DateTimeOffset(offboard.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+        await _hrStorage.WriteEmployeeAsync(existing, ct);
+        await _embeddings.IndexAsync(existing, ct);
+        return Serialize(new { updated = true, email = existing.RowKey, fullName = existing.FullName, status = existing.Status });
+    }
+
+    private async Task<string> DeleteEmployeeAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var email = ParseStr(call, "email");
+        if (string.IsNullOrWhiteSpace(email)) return "Missing email";
+        await _hrStorage.DeleteEmployeeAsync(email, ct);
+        _cache.RemoveEntry("employee", email.ToLowerInvariant());
+        return Serialize(new { deleted = true, email });
+    }
+
     // ── Customer tools ────────────────────────────────────────────────────────
 
     private async Task<string> ListCustomersAsync(ChatToolCall call, CancellationToken ct)
@@ -460,6 +538,44 @@ public class HqChatAgent
         await _customerStorage.WriteCustomerAsync(entity, ct);
         await _embeddings.IndexAsync(entity, ct);
         return Serialize(new { created = true, customerId = entity.RowKey, name = entity.Name });
+    }
+
+    private async Task<string> UpdateCustomerAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var customerId = ParseStr(call, "customerId");
+        if (string.IsNullOrWhiteSpace(customerId)) return "Missing customerId";
+
+        var existing = await _customerStorage.GetCustomerAsync(customerId, ct);
+        if (existing is null) return "Customer not found";
+
+        var name                = ParseStr(call, "name");
+        var orgNumber           = ParseStr(call, "orgNumber");
+        var country             = ParseStr(call, "country");
+        var primaryContactName  = ParseStr(call, "primaryContactName");
+        var primaryContactEmail = ParseStr(call, "primaryContactEmail");
+        var notes               = ParseStr(call, "notes");
+        var status              = ParseStr(call, "status");
+
+        if (name                is not null) existing.Name                = name;
+        if (orgNumber           is not null) existing.OrgNumber           = orgNumber;
+        if (country             is not null) existing.Country             = country;
+        if (primaryContactName  is not null) existing.PrimaryContactName  = primaryContactName;
+        if (primaryContactEmail is not null) existing.PrimaryContactEmail = primaryContactEmail;
+        if (notes               is not null) existing.Notes               = notes;
+        if (status              is not null) existing.Status              = status;
+
+        await _customerStorage.WriteCustomerAsync(existing, ct);
+        await _embeddings.IndexAsync(existing, ct);
+        return Serialize(new { updated = true, customerId = existing.RowKey, name = existing.Name });
+    }
+
+    private async Task<string> DeleteCustomerAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var customerId = ParseStr(call, "customerId");
+        if (string.IsNullOrWhiteSpace(customerId)) return "Missing customerId";
+        await _customerStorage.DeleteCustomerAsync(customerId, ct);
+        _cache.RemoveEntry("customer", customerId);
+        return Serialize(new { deleted = true, customerId });
     }
 
     // ── Project tools ─────────────────────────────────────────────────────────
@@ -597,6 +713,57 @@ public class HqChatAgent
             status         = existing.Status,
             employeeEmails = currentEmails.ToArray(),
         });
+    }
+
+    private async Task<string> DeleteProjectAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var projectId = ParseStr(call, "projectId");
+        if (string.IsNullOrWhiteSpace(projectId)) return "Missing projectId";
+        await _projectStorage.DeleteProjectAsync(projectId, ct);
+        _cache.RemoveEntry("project", projectId);
+        return Serialize(new { deleted = true, projectId });
+    }
+
+    private async Task<string> LinkContractToCustomerAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var contractId = ParseStr(call, "contractId");
+        var customerId = ParseStr(call, "customerId");
+        if (string.IsNullOrWhiteSpace(contractId)) return "Missing contractId";
+        if (string.IsNullOrWhiteSpace(customerId)) return "Missing customerId";
+
+        var customer = await _customerStorage.GetCustomerAsync(customerId, ct);
+        if (customer is null) return "Customer not found";
+
+        var contract = await _contractStorage.GetExtractionAsync(contractId, ct);
+        if (contract is null) return "Contract not found";
+
+        // Merge customer into contract's linked lists (idempotent)
+        var existingIds   = TryDeserializeStringArray(contract.LinkedCustomerIds).ToList();
+        var existingNames = TryDeserializeStringArray(contract.LinkedCustomerNames).ToList();
+        if (!existingIds.Contains(customerId, StringComparer.OrdinalIgnoreCase))
+        {
+            existingIds.Add(customerId);
+            existingNames.Add(customer.Name);
+        }
+
+        await _contractStorage.UpdateLinkedCustomersAsync(contractId, existingIds, existingNames, ct);
+        await _customerStorage.LinkContractAsync(customerId, contractId, ct);
+
+        // Re-index both for updated embeddings
+        var updated = await _contractStorage.GetExtractionAsync(contractId, ct);
+        if (updated is not null) await _embeddings.IndexAsync(updated, ct);
+        await _embeddings.IndexAsync(customer, ct);
+
+        return Serialize(new { linked = true, contractId, customerId, customerName = customer.Name });
+    }
+
+    private async Task<string> DeleteContractAsync(ChatToolCall call, CancellationToken ct)
+    {
+        var contractId = ParseStr(call, "contractId");
+        if (string.IsNullOrWhiteSpace(contractId)) return "Missing contractId";
+        var deleted = await _contractStorage.HardDeleteContractAsync(contractId, ct);
+        if (deleted) _cache.RemoveEntry("contract", contractId);
+        return Serialize(new { deleted, contractId });
     }
 
     // ── Timereport tools ──────────────────────────────────────────────────────

@@ -78,6 +78,14 @@ public class ProjectStorageService
             p.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task DeleteProjectAsync(string projectId, CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Projects);
+        try { await table.DeleteEntityAsync("projects", projectId, cancellationToken: ct); }
+        catch (RequestFailedException ex) when (ex.Status == 404) { }
+        _logger.LogInformation("Deleted project {ProjectId}", projectId);
+    }
+
     public async Task WriteProjectAsync(ProjectEntity entity, CancellationToken ct = default)
     {
         var table = _client.GetTableClient(TableNames.Projects);

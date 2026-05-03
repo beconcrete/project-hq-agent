@@ -81,6 +81,14 @@ public class HRTableStorageService
         }
     }
 
+    public async Task DeleteEmployeeAsync(string email, CancellationToken ct = default)
+    {
+        var table = _client.GetTableClient(TableNames.Employees);
+        try { await table.DeleteEntityAsync("employees", email.ToLowerInvariant(), cancellationToken: ct); }
+        catch (RequestFailedException ex) when (ex.Status == 404) { }
+        _logger.LogInformation("Deleted employee {Email}", email);
+    }
+
     public async Task WriteHRConfigAsync(HRConfigEntity entity, CancellationToken ct = default)
     {
         var table = _client.GetTableClient(TableNames.HRConfig);
