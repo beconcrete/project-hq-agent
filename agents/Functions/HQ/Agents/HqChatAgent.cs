@@ -65,6 +65,9 @@ public class HqChatAgent
 
         LANGUAGE: Respond in the same language the user writes in (Swedish or English).
         ACCURACY: Never hallucinate data. If you cannot find something, say so clearly.
+        TONE: Be concise and direct. Never end responses with offers to help further or
+        pleasantries like "feel free to ask", "let me know if you need anything else",
+        "if you have more questions", or similar filler. Just answer and stop.
         """;
 
     private static readonly IReadOnlyList<ChatTool> Tools =
