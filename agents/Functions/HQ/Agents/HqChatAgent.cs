@@ -236,11 +236,12 @@ public class HqChatAgent
 
         // Identify the signed-in user's employee record via Auth0 subject or login email.
         var userEmployee = await _hrStorage.FindByAuthAsync(auth0Subject, userEmail, ct);
+        var subPart      = !string.IsNullOrEmpty(auth0Subject) ? $", auth0Subject: {auth0Subject}" : "";
         var userContext  = userEmployee is not null
-            ? $"The signed-in user is {userEmployee.FullName} (employeeId: {userEmployee.RowKey}, workEmail: {userEmployee.WorkEmail}{(isAdmin ? ", role: admin" : "")})."
+            ? $"The signed-in user is {userEmployee.FullName} (employeeId: {userEmployee.RowKey}, workEmail: {userEmployee.WorkEmail}{subPart}{(isAdmin ? ", role: admin" : "")})."
             : !string.IsNullOrEmpty(userEmail)
-                ? $"The signed-in user has email {userEmail}{(isAdmin ? " (admin)" : "")}. No matching employee record found."
-                : $"No employee record found for the signed-in user{(isAdmin ? " (admin)" : "")}.";
+                ? $"The signed-in user has email {userEmail}{subPart}{(isAdmin ? " (admin)" : "")}. No matching employee record found."
+                : $"No employee record found for the signed-in user{subPart}{(isAdmin ? " (admin)" : "")}.";
 
         var messages = new List<ChatMessage>
         {
