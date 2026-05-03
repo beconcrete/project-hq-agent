@@ -67,10 +67,11 @@ public class HqChatAgent
         TIME REPORTING — conversational flow:
         1. When the user reports time (e.g. "report 2 hours on project X"), call search_entities first
            to resolve the project name to a projectId, then call log_time.
-        2. After saving, respond: "Done — X hours logged on [Project] for [date]. What did you work on today?"
-           Include the rowKey in your response so you can update the note in the next turn.
+        2. After saving, respond EXACTLY: "Done — X hours logged on [Project] for [date] (ref: [rowKey]). What did you work on?"
+           You MUST include the rowKey verbatim in the response — it is not shown to the user but you will
+           need it in the next turn to call update_timereport_note. Never omit it.
         3. When the user replies with what they did, call update_timereport_note with the rowKey from step 2.
-        4. Confirm: "Got it — I've added your note to today's entry."
+        4. Confirm: "Got it — note added."
         5. For queries like "how many hours this week?" or "who reported on project X?", resolve any names
            via search_entities first, then call query_hours with the resolved IDs.
         6. To remove entries: call query_hours first to find the matching entries and their rowKeys,
@@ -246,11 +247,12 @@ public class HqChatAgent
         // Identify the signed-in user's employee record via Auth0 subject or login email.
         var userEmployee = await _hrStorage.FindByAuthAsync(auth0Subject, userEmail, ct);
         var subPart      = !string.IsNullOrEmpty(auth0Subject) ? $", auth0Subject: {auth0Subject}" : "";
+        var today        = DateTime.UtcNow.ToString("yyyy-MM-dd");
         var userContext  = userEmployee is not null
-            ? $"The signed-in user is {userEmployee.FullName} (employeeId: {userEmployee.RowKey}, workEmail: {userEmployee.WorkEmail}{subPart}{(isAdmin ? ", role: admin" : "")})."
+            ? $"Today is {today}. The signed-in user is {userEmployee.FullName} (employeeId: {userEmployee.RowKey}, workEmail: {userEmployee.WorkEmail}{subPart}{(isAdmin ? ", role: admin" : "")})."
             : !string.IsNullOrEmpty(userEmail)
-                ? $"The signed-in user has email {userEmail}{subPart}{(isAdmin ? " (admin)" : "")}. No matching employee record found."
-                : $"No employee record found for the signed-in user{subPart}{(isAdmin ? " (admin)" : "")}.";
+                ? $"Today is {today}. The signed-in user has email {userEmail}{subPart}{(isAdmin ? " (admin)" : "")}. No matching employee record found."
+                : $"Today is {today}. No employee record found for the signed-in user{subPart}{(isAdmin ? " (admin)" : "")}.";
 
         var messages = new List<ChatMessage>
         {
