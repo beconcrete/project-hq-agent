@@ -30,6 +30,7 @@ var host = new HostBuilder()
         services.AddScoped<ProjectStorageService>();
         services.AddScoped<HRTableStorageService>();
         services.AddScoped<TimereportStorageService>();
+        services.AddScoped<EmbeddingsStorageService>();
     })
     .Build();
 

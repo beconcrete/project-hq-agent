@@ -38,7 +38,7 @@ public class ReindexFunction
 
     [Function("management-reindex")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Admin, "post", Route = "management-reindex")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management-reindex")] HttpRequestData req,
         CancellationToken ct)
     {
         _logger.LogInformation("ReindexFunction triggered — marking all entities pending");
