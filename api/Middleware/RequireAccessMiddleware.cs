@@ -87,8 +87,24 @@ public class RequireAccessMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        context.Items["userId"] = me.UserId;
+        context.Items["userId"]    = me.UserId;
+        context.Items["userEmail"] = ExtractEmailFromJwt(token) ?? "";
         await next(context);
+    }
+
+    private static string? ExtractEmailFromJwt(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length < 2) return null;
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("email", out var v) ? v.GetString() : null;
+        }
+        catch { return null; }
     }
 
     private static async Task WriteResponseAsync(

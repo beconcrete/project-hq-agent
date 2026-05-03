@@ -219,16 +219,21 @@ public class HqChatAgent
         string sessionId,
         string message,
         string userId,
+        string userEmail,
         bool   isAdmin,
         CancellationToken ct)
     {
         var caller  = new ContractCallerContext(userId, isAdmin);
         var history = await LoadHistoryAsync(userId, sessionId, ct);
 
-        var userEmployee = await _hrStorage.GetEmployeeAsync(userId, ct);
-        var userContext  = userEmployee is not null
-            ? $"The signed-in user is {userEmployee.FullName} (email: {userId}{(isAdmin ? ", role: admin" : "")})."
-            : $"The signed-in user has email {userId}{(isAdmin ? " (admin)" : "")}.";
+        var userEmployee = !string.IsNullOrEmpty(userEmail)
+            ? await _hrStorage.GetEmployeeAsync(userEmail, ct)
+            : null;
+        var userContext = userEmployee is not null
+            ? $"The signed-in user is {userEmployee.FullName} (email: {userEmail}{(isAdmin ? ", role: admin" : "")})."
+            : !string.IsNullOrEmpty(userEmail)
+                ? $"The signed-in user has email {userEmail}{(isAdmin ? " (admin)" : "")}."
+                : $"The signed-in user id is {userId}{(isAdmin ? " (admin)" : "")}.";
 
         var messages = new List<ChatMessage>
         {
