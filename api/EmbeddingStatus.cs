@@ -37,10 +37,12 @@ public class EmbeddingStatus
         catch { return await Plain(req, HttpStatusCode.ServiceUnavailable, "Auth service unavailable"); }
         if (!guard.Allowed) return await Plain(req, HttpStatusCode.Forbidden, "Forbidden");
 
-        var pending = await _embeddingsStorage.ListPendingAsync(context.CancellationToken);
+        var all          = await _embeddingsStorage.ListAllAsync(context.CancellationToken);
+        var okCount      = all.Count(e => e.Status == "ok");
+        var pendingCount = all.Count(e => e.Status == "pending");
 
         var res = req.CreateResponse();
-        await res.WriteAsJsonAsync(new { pendingCount = pending.Count });
+        await res.WriteAsJsonAsync(new { okCount, pendingCount });
         res.StatusCode = HttpStatusCode.OK;
         return res;
     }
